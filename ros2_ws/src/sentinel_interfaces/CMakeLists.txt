@@ -9,6 +9,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/BattleEntity.msg"
   "msg/BattleState.msg"
+  "msg/ChassisControl.msg"
   "msg/HardwareState.msg"
   "msg/PolicyObservation.msg"
   "msg/SystemStatus.msg"

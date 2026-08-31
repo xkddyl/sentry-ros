@@ -7,9 +7,17 @@ int main(void) {
         .vx_mm_s = 1250,
         .vy_mm_s = -500,
         .wz_mrad_s = 0,
+        .spin_wz_mrad_s = 350,
+        .follow_yaw_offset_mrad = 0,
+        .yaw_big_target_mrad = 100,
+        .yaw_small_target_mrad = -50,
+        .pitch_target_mrad = 25,
         .target_slot = 5,
+        .chassis_mode = SENTINEL_CHASSIS_SPIN,
+        .command_frame = SENTINEL_FRAME_WORLD,
         .weapons_free = true,
         .estop = false,
+        .enable = true,
     };
     uint8_t frame[SENTINEL_MAX_FRAME_SIZE];
     size_t index;
