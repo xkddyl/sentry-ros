@@ -11,13 +11,19 @@
 | `/cmd_vel_teleop` | `geometry_msgs/msg/Twist` | 遥控适配器 | 遥控优先入口，仍必须过安全层 |
 | `/sentry/cmd_vel_nav` | `geometry_msgs/msg/Twist` | Nav2 controller | Nav2 原始输出，需被仲裁到 `/cmd_vel` |
 | `/sentry/cmd_vel_safe` | `geometry_msgs/msg/Twist` | `safety_supervisor` 唯一 | 仿真或实车唯一执行速度 |
+| `/sentry/chassis_control` | `sentinel_interfaces/msg/ChassisControl` | 模式管理/授权控制器 | 原始底盘模式、坐标系、SPIN/FOLLOW 请求 |
+| `/sentry/chassis_control_safe` | `sentinel_interfaces/msg/ChassisControl` | `safety_supervisor` 唯一 | 经过急停、硬件/超时门控后的唯一执行模式 |
 | `/sentry/estop` | `std_msgs/msg/Bool` | `mode_manager`/授权操作员 | 急停锁存；`true` 表示禁止运动 |
 | `/sentry/system_mode` | `std_msgs/msg/UInt8` | `mode_manager` | `sim=0`、`hil=1`、`real=2` |
 | `/sentry/system_status` | `sentinel_interfaces/msg/SystemStatus` | `safety_supervisor` | 看门狗、模式和互锁状态 |
 
+`ChassisControl` 只定义控制契约，不在安全层实现 Follow/SPIN 控制律。当前未出现
+`/sentry/chassis_control` 发布者时，为兼容既有 Nav2 链路，安全层使用 `DIRECT + BODY`
+作为缺省模式；一旦收到过显式模式请求，后续模式超时会转为 `STOP`。
+
 安全监督必须执行急停、速度/加速度限幅、命令超时和 HIL/实车硬件心跳检查。MCP、调试
-键盘、自瞄和固件上位机均不得直接发布 `/sentry/cmd_vel_safe`、电机电流、PWM 或 CAN
-帧。
+键盘、自瞄和固件上位机均不得直接发布 `/sentry/cmd_vel_safe`、
+`/sentry/chassis_control_safe`、电机电流、PWM 或 CAN 帧。
 
 ## 战术与交战
 
@@ -45,7 +51,12 @@
 | `/sentry/lidar/points` | `sensor_msgs/msg/PointCloud2` | `lidar_link`，字段至少 `x,y,z,intensity,time`，时间单位秒 |
 | `/sentry/scan` | `sensor_msgs/msg/LaserScan` | 2D 投影/调试输入，可选 |
 | `/sentry/imu` | `sensor_msgs/msg/Imu` | `imu_link`，仿真和实车保持同一语义 |
-| `/sentry/hardware_state` | `sentinel_interfaces/msg/HardwareState` | 硬件在线、热量、弹量和链路状态 |
+| `/sentry/hardware_state` | `sentinel_interfaces/msg/HardwareState` | 有效遥测转换后的机器人状态 |
+| `/sentry/hardware_diagnostics` | `sentinel_interfaces/msg/HardwareDiagnostics` | transport/protocol 状态、收发频率、CRC/版本/sequence/重连计数 |
+
+`/sentry/hardware_diagnostics` 是纯诊断出口，不能反向控制底盘。`hardware_bridge` 只有在
+完整帧通过 magic/version/length/CRC、payload 解码和类型检查后，才刷新有效遥测时间；
+错误帧不得让硬件看起来在线。
 
 ## TF 所有权
 
@@ -67,14 +78,39 @@ map -> odom -> base_link -> lidar_link
 ## 后端互斥
 
 ```text
-/cmd_vel 或 /cmd_vel_teleop
-        ↓
-safety_supervisor
-        ↓
-/sentry/cmd_vel_safe
+/cmd_vel 或 /cmd_vel_teleop       /sentry/chassis_control
+        ↓                                  ↓
+        └──────────── safety_supervisor ───┘
+                         ↓
+          /sentry/cmd_vel_safe + /sentry/chassis_control_safe
+                         ↓
         ├── VirtualLowerController → Isaac Sim
         └── hardware_bridge → USB CDC/UDP → STM32
 ```
 
 运行模式中只能启用一个运动后端和一个 `odom -> base_link` 所有者。完整机器可读版本见
 [`config/interfaces/ros_topics.yaml`](../config/interfaces/ros_topics.yaml)。
+
+## 上位机协议回环
+
+在没有真实 STM32 时，使用 `mock_lower_controller` 作为 **二进制 UDP 对端**，而不是直接
+伪造 `/sentry/hardware_state`：
+
+```text
+safety_supervisor
+  -> hardware_bridge
+  -> UDP + wire protocol v2
+  -> mock_lower_controller
+  -> UDP telemetry v2
+  -> hardware_bridge
+  -> /sentry/hardware_state + /sentry/hardware_diagnostics
+```
+
+入口为：
+
+```bash
+ros2 launch sentinel_bringup lower_loopback.launch.py
+```
+
+Mock 支持 `drop_rate`、`crc_error_rate`、`wrong_version_rate`、`delay_ms`、`freeze`、
+`sequence_jump_every` 等故障注入参数，用于在真实下位机到位前验证上位机的降级行为。

@@ -25,11 +25,23 @@ class InterfaceContractTest(unittest.TestCase):
         self.assertEqual(commands["teleop_chassis"]["topic"], "/cmd_vel_teleop")
         self.assertEqual(commands["safe_chassis"]["topic"], "/sentry/cmd_vel_safe")
         self.assertEqual(
+            commands["raw_chassis_control"]["topic"],
+            "/sentry/chassis_control",
+        )
+        self.assertEqual(
+            commands["safe_chassis_control"]["topic"],
+            "/sentry/chassis_control_safe",
+        )
+        self.assertEqual(
+            self.topics["state"]["hardware_diagnostics"]["topic"],
+            "/sentry/hardware_diagnostics",
+        )
+        self.assertEqual(
             self.topics["tf_ownership"]["global_topics"], ["/tf", "/tf_static"]
         )
         self.assertNotIn("/sentry/tf", json.dumps(self.topics, ensure_ascii=False))
 
-    def test_safety_node_uses_absolute_buses(self) -> None:
+    def test_safety_node_owns_both_safe_control_buses(self) -> None:
         source = (
             ROOT
             / "ros2_ws"
@@ -40,8 +52,28 @@ class InterfaceContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn('"/cmd_vel"', source)
         self.assertIn('"/cmd_vel_teleop"', source)
+        self.assertIn('"/sentry/chassis_control"', source)
         self.assertIn('"/sentry/cmd_vel_safe"', source)
+        self.assertIn('"/sentry/chassis_control_safe"', source)
         self.assertNotIn('"/sentry/tf"', source)
+
+    def test_hardware_bridge_consumes_safe_chassis_control_only(self) -> None:
+        source = (
+            ROOT
+            / "ros2_ws"
+            / "src"
+            / "sentinel_core"
+            / "sentinel_core"
+            / "hardware_bridge.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"/sentry/cmd_vel_safe"', source)
+        self.assertIn('"/sentry/chassis_control_safe"', source)
+        self.assertIn('"/sentry/hardware_diagnostics"', source)
+        self.assertNotIn(
+            '"/sentry/chassis_control",',
+            source,
+            "hardware bridge must not subscribe to the raw mode bus",
+        )
 
     def test_active_files_do_not_create_namespaced_tf(self) -> None:
         roots = [

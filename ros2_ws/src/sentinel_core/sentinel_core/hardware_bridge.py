@@ -11,12 +11,17 @@ from rclpy.node import Node
 from std_msgs.msg import Bool, Int8
 from tf2_ros import TransformBroadcaster
 
-from sentinel_interfaces.msg import ChassisControl, HardwareState
+from sentinel_interfaces.msg import (
+    ChassisControl,
+    HardwareDiagnostics,
+    HardwareState,
+)
 
 from .wire_protocol import (
     CHASSIS_DIRECT,
     CHASSIS_STOP,
     FRAME_BODY,
+    VERSION,
     FrameParser,
     TYPE_TELEMETRY,
     decode_telemetry,
@@ -34,18 +39,30 @@ class HardwareBridge(Node):
         self.declare_parameter("command_rate_hz", 100.0)
         self.declare_parameter("command_timeout_s", 0.20)
         self.declare_parameter("control_timeout_s", 0.50)
+        self.declare_parameter("telemetry_timeout_s", 0.25)
+        self.declare_parameter("hard_disconnect_timeout_s", 2.0)
+        self.declare_parameter("reconnect_period_s", 1.0)
+        self.declare_parameter("diagnostics_rate_hz", 2.0)
         self.declare_parameter("publish_odometry", True)
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("odom_frame", "odom")
 
         self._transport_name = str(self.get_parameter("transport").value)
-        self._transport = self._open_transport()
+        self._endpoint = str(self.get_parameter("endpoint").value)
+        self._transport = None
+        self._transport_state = HardwareDiagnostics.STATE_DISCONNECTED
+        self._next_reconnect_time = 0.0
+        self._opened_at = 0.0
+        self._ever_connected = False
+        self._last_transport_error = "not connected"
+
         self._parser = FrameParser()
         self._sequence = 0
         self._last_cmd_time = 0.0
         self._last_control_time = 0.0
         self._last_rx_time = 0.0
         self._last_rx_sequence = 0
+        self._have_rx_sequence = False
 
         self._cmd = Twist()
         self._control = self._default_control()
@@ -53,6 +70,19 @@ class HardwareBridge(Node):
         self._weapons_free = False
         self._estop = True
         self._last_telemetry = None
+
+        self._tx_frames = 0
+        self._rx_frames = 0
+        self._tx_bytes = 0
+        self._rx_bytes = 0
+        self._decode_errors = 0
+        self._sequence_gaps = 0
+        self._duplicate_frames = 0
+        self._out_of_order_frames = 0
+        self._reconnect_count = 0
+        self._last_diag_time = time.monotonic()
+        self._last_diag_tx_frames = 0
+        self._last_diag_rx_frames = 0
 
         self.create_subscription(Twist, "/sentry/cmd_vel_safe", self._on_cmd, 20)
         self.create_subscription(
@@ -70,12 +100,19 @@ class HardwareBridge(Node):
         self._state_pub = self.create_publisher(
             HardwareState, "/sentry/hardware_state", 10
         )
+        self._diag_pub = self.create_publisher(
+            HardwareDiagnostics, "/sentry/hardware_diagnostics", 10
+        )
         self._odom_pub = self.create_publisher(Odometry, "/sentry/odom", 20)
         self._tf = TransformBroadcaster(self)
 
         rate = max(float(self.get_parameter("command_rate_hz").value), 1.0)
         self.create_timer(1.0 / rate, self._tick)
         self.create_timer(0.1, self._publish_state)
+        diag_rate = max(float(self.get_parameter("diagnostics_rate_hz").value), 0.2)
+        self.create_timer(1.0 / diag_rate, self._publish_diagnostics)
+
+        self._ensure_transport(time.monotonic())
 
     @staticmethod
     def _default_control() -> ChassisControl:
@@ -91,11 +128,10 @@ class HardwareBridge(Node):
         return control
 
     def _open_transport(self):
-        endpoint = str(self.get_parameter("endpoint").value)
         if self._transport_name == "udp":
-            if ":" not in endpoint:
+            if ":" not in self._endpoint:
                 raise ValueError("UDP endpoint must be host:port")
-            host, port_text = endpoint.rsplit(":", 1)
+            host, port_text = self._endpoint.rsplit(":", 1)
             transport = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             transport.bind(
                 ("0.0.0.0", int(self.get_parameter("udp_local_port").value))
@@ -111,12 +147,62 @@ class HardwareBridge(Node):
                     "install python3-serial for serial transport"
                 ) from exc
             return serial.Serial(
-                endpoint,
+                self._endpoint,
                 baudrate=int(self.get_parameter("baudrate").value),
                 timeout=0,
                 write_timeout=0.02,
             )
         raise ValueError(f"unsupported hardware transport: {self._transport_name}")
+
+    def _ensure_transport(self, now: float) -> bool:
+        if self._transport is not None:
+            return True
+        if now < self._next_reconnect_time:
+            return False
+
+        self._transport_state = HardwareDiagnostics.STATE_CONNECTING
+        try:
+            transport = self._open_transport()
+        except (OSError, RuntimeError, ValueError) as exc:
+            self._transport_state = HardwareDiagnostics.STATE_DISCONNECTED
+            self._last_transport_error = str(exc)
+            self._next_reconnect_time = now + max(
+                float(self.get_parameter("reconnect_period_s").value), 0.1
+            )
+            self.get_logger().warning(f"hardware connect failed: {exc}")
+            return False
+
+        self._transport = transport
+        self._transport_state = HardwareDiagnostics.STATE_CONNECTED
+        self._opened_at = now
+        self._last_transport_error = ""
+        if self._ever_connected:
+            self._reconnect_count += 1
+        else:
+            self._ever_connected = True
+        self.get_logger().info(
+            f"hardware transport connected: {self._transport_name} {self._endpoint}"
+        )
+        return True
+
+    def _close_transport(self) -> None:
+        transport = self._transport
+        self._transport = None
+        if transport is None:
+            return
+        try:
+            transport.close()
+        except OSError:
+            pass
+
+    def _mark_transport_fault(self, now: float, reason: str) -> None:
+        self._close_transport()
+        self._transport_state = HardwareDiagnostics.STATE_DISCONNECTED
+        self._last_transport_error = reason
+        self._next_reconnect_time = now + max(
+            float(self.get_parameter("reconnect_period_s").value), 0.1
+        )
+        self.get_logger().warning(f"hardware transport fault: {reason}")
 
     def _on_cmd(self, message: Twist) -> None:
         values = (message.linear.x, message.linear.y, message.angular.z)
@@ -165,21 +251,58 @@ class HardwareBridge(Node):
         self._estop = bool(message.data)
 
     def _send(self, data: bytes) -> None:
+        if self._transport is None:
+            raise OSError("transport is not connected")
         if self._transport_name == "udp":
-            self._transport.send(data)
+            sent = self._transport.send(data)
+            if sent != len(data):
+                raise OSError(f"short UDP send: {sent}/{len(data)}")
         else:
-            self._transport.write(data)
+            sent = self._transport.write(data)
+            if sent != len(data):
+                raise OSError(f"short serial write: {sent}/{len(data)}")
 
-    def _receive(self) -> bytes:
-        try:
-            if self._transport_name == "udp":
-                return self._transport.recv(4096)
-            return self._transport.read(4096)
-        except (BlockingIOError, TimeoutError):
-            return b""
+    def _receive_chunks(self) -> list[bytes]:
+        if self._transport is None:
+            return []
+        chunks: list[bytes] = []
+        if self._transport_name == "udp":
+            while True:
+                try:
+                    data = self._transport.recv(4096)
+                except (BlockingIOError, TimeoutError):
+                    break
+                if not data:
+                    break
+                chunks.append(data)
+            return chunks
 
-    def _tick(self) -> None:
-        now = time.monotonic()
+        data = self._transport.read(4096)
+        if data:
+            chunks.append(data)
+        return chunks
+
+    def _classify_sequence(self, sequence: int) -> None:
+        sequence = int(sequence) & 0xFFFF
+        if not self._have_rx_sequence:
+            self._last_rx_sequence = sequence
+            self._have_rx_sequence = True
+            return
+
+        delta = (sequence - self._last_rx_sequence) & 0xFFFF
+        if delta == 0:
+            self._duplicate_frames += 1
+            return
+        if delta == 1:
+            self._last_rx_sequence = sequence
+            return
+        if delta < 0x8000:
+            self._sequence_gaps += delta - 1
+            self._last_rx_sequence = sequence
+            return
+        self._out_of_order_frames += 1
+
+    def _build_command_frame(self, now: float) -> bytes:
         cmd_fresh = (
             now - self._last_cmd_time
             <= float(self.get_parameter("command_timeout_s").value)
@@ -192,7 +315,6 @@ class HardwareBridge(Node):
 
         command = self._cmd if cmd_fresh and not self._estop else Twist()
         control = self._control if control_fresh else self._default_control()
-
         enabled = (
             cmd_fresh
             and control_fresh
@@ -229,24 +351,60 @@ class HardwareBridge(Node):
             enable=enabled,
         )
         self._sequence = (self._sequence + 1) & 0xFFFF
+        return frame
+
+    def _tick(self) -> None:
+        now = time.monotonic()
+        frame = self._build_command_frame(now)
+
+        if not self._ensure_transport(now):
+            return
 
         try:
             self._send(frame)
-            data = self._receive()
+            self._tx_frames += 1
+            self._tx_bytes += len(frame)
+            chunks = self._receive_chunks()
         except (OSError, ValueError) as exc:
-            self.get_logger().error(
-                f"hardware transport error: {exc}",
-                throttle_duration_sec=2.0,
-            )
+            self._mark_transport_fault(now, str(exc))
             return
 
-        for received in self._parser.feed(data):
-            if received.message_type == TYPE_TELEMETRY:
-                self._last_telemetry = decode_telemetry(received)
+        for chunk in chunks:
+            self._rx_bytes += len(chunk)
+            for received in self._parser.feed(chunk):
+                if received.message_type != TYPE_TELEMETRY:
+                    self._decode_errors += 1
+                    continue
+                try:
+                    telemetry = decode_telemetry(received)
+                except ValueError:
+                    self._decode_errors += 1
+                    continue
+
+                self._classify_sequence(received.sequence)
+                self._last_telemetry = telemetry
                 self._last_rx_time = now
-                self._last_rx_sequence = received.sequence
+                self._rx_frames += 1
                 if bool(self.get_parameter("publish_odometry").value):
                     self._publish_odometry()
+
+        telemetry_timeout = max(
+            float(self.get_parameter("telemetry_timeout_s").value), 0.01
+        )
+        telemetry_age = (
+            now - self._last_rx_time if self._last_rx_time > 0.0 else now - self._opened_at
+        )
+        if telemetry_age <= telemetry_timeout:
+            self._transport_state = HardwareDiagnostics.STATE_CONNECTED
+        else:
+            self._transport_state = HardwareDiagnostics.STATE_DEGRADED
+
+        hard_timeout = max(
+            float(self.get_parameter("hard_disconnect_timeout_s").value),
+            telemetry_timeout,
+        )
+        if self._transport_name == "serial" and telemetry_age > hard_timeout:
+            self._mark_transport_fault(now, "telemetry timeout")
 
     def _publish_odometry(self) -> None:
         telemetry = self._last_telemetry
@@ -274,10 +432,14 @@ class HardwareBridge(Node):
         transform.header = odom.header
         transform.child_frame_id = odom.child_frame_id
         transform.transform.translation.x = telemetry.x_m
-        transform.translation.y = telemetry.y_m
+        transform.transform.translation.y = telemetry.y_m
         transform.transform.rotation.z = qz
         transform.transform.rotation.w = qw
         self._tf.sendTransform(transform)
+
+    def _telemetry_fresh(self, now: float) -> bool:
+        timeout = max(float(self.get_parameter("telemetry_timeout_s").value), 0.01)
+        return self._last_rx_time > 0.0 and now - self._last_rx_time <= timeout
 
     def _publish_state(self) -> None:
         now = time.monotonic()
@@ -285,7 +447,7 @@ class HardwareBridge(Node):
 
         state = HardwareState()
         state.header.stamp = self.get_clock().now().to_msg()
-        state.online = telemetry is not None and now - self._last_rx_time < 0.25
+        state.online = self._telemetry_fresh(now)
         state.estop = self._estop
 
         if telemetry is not None:
@@ -320,11 +482,57 @@ class HardwareBridge(Node):
         state.last_rx_sequence = self._last_rx_sequence
         self._state_pub.publish(state)
 
+    def _publish_diagnostics(self) -> None:
+        now = time.monotonic()
+        dt = max(now - self._last_diag_time, 1e-6)
+        tx_rate = (self._tx_frames - self._last_diag_tx_frames) / dt
+        rx_rate = (self._rx_frames - self._last_diag_rx_frames) / dt
+        self._last_diag_time = now
+        self._last_diag_tx_frames = self._tx_frames
+        self._last_diag_rx_frames = self._rx_frames
+
+        fresh = self._telemetry_fresh(now)
+        if self._last_rx_time > 0.0:
+            rx_age_ms = (now - self._last_rx_time) * 1000.0
+        else:
+            rx_age_ms = -1.0
+
+        message = HardwareDiagnostics()
+        message.header.stamp = self.get_clock().now().to_msg()
+        message.transport_state = int(self._transport_state)
+        message.transport = self._transport_name
+        message.endpoint = self._endpoint
+        message.protocol_version = VERSION
+        message.telemetry_fresh = fresh
+        message.last_valid_rx_age_ms = float(rx_age_ms)
+        message.tx_rate_hz = float(tx_rate)
+        message.rx_rate_hz = float(rx_rate)
+        message.tx_frames = self._tx_frames
+        message.rx_frames = self._rx_frames
+        message.tx_bytes = self._tx_bytes
+        message.rx_bytes = self._rx_bytes
+        message.crc_errors = self._parser.crc_errors
+        message.protocol_errors = self._parser.protocol_errors + self._decode_errors
+        message.framing_bytes_discarded = self._parser.framing_bytes_discarded
+        message.sequence_gaps = self._sequence_gaps
+        message.duplicate_frames = self._duplicate_frames
+        message.out_of_order_frames = self._out_of_order_frames
+        message.reconnect_count = self._reconnect_count
+        message.last_rx_sequence = self._last_rx_sequence
+
+        if self._transport_state == HardwareDiagnostics.STATE_CONNECTED:
+            message.detail = "connected; telemetry valid"
+        elif self._transport_state == HardwareDiagnostics.STATE_DEGRADED:
+            message.detail = "transport open; telemetry stale or missing"
+        elif self._transport_state == HardwareDiagnostics.STATE_CONNECTING:
+            message.detail = "connecting"
+        else:
+            message.detail = self._last_transport_error or "disconnected"
+        self._diag_pub.publish(message)
+
     def destroy_node(self):
-        try:
-            self._transport.close()
-        finally:
-            return super().destroy_node()
+        self._close_transport()
+        return super().destroy_node()
 
 
 def main(args=None) -> None:

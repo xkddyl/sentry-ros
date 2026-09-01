@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "ros2_ws" / "src" / "sentinel_core"))
 
 from sentinel_core.wire_protocol import (  # noqa: E402
     CHASSIS_SPIN,
+    CRC,
     FRAME_WORLD,
     FrameParser,
     STATUS_FLAG_COMMAND_FRESH,
@@ -19,6 +20,9 @@ from sentinel_core.wire_protocol import (  # noqa: E402
     STATUS_FLAG_IMU_VALID,
     TYPE_COMMAND,
     TYPE_TELEMETRY,
+    VERSION,
+    crc16_ccitt,
+    decode_command,
     decode_telemetry,
     encode_command,
     encode_telemetry,
@@ -69,6 +73,8 @@ class WireProtocolTest(unittest.TestCase):
 
         self.assertEqual(len(output), 1)
         self.assertEqual(output[0].message_type, TYPE_TELEMETRY)
+        self.assertGreaterEqual(parser.crc_errors, 1)
+        self.assertGreaterEqual(parser.framing_bytes_discarded, len(b"noise"))
 
         decoded = decode_telemetry(output[0])
         self.assertAlmostEqual(decoded.x_m, 1.25)
@@ -81,6 +87,66 @@ class WireProtocolTest(unittest.TestCase):
         self.assertEqual(decoded.chassis_mode, CHASSIS_SPIN)
         self.assertEqual(decoded.command_frame, FRAME_WORLD)
         self.assertEqual(decoded.fault_flags, 0xA5)
+
+    def test_command_round_trip_decode(self) -> None:
+        raw = encode_command(
+            sequence=42,
+            timestamp_ms=1234,
+            vx_m_s=0.3,
+            vy_m_s=-0.2,
+            wz_rad_s=0.1,
+            spin_wz_rad_s=2.5,
+            follow_yaw_offset_rad=0.25,
+            yaw_big_target_rad=0.5,
+            yaw_small_target_rad=-0.4,
+            pitch_target_rad=0.1,
+            chassis_mode=CHASSIS_SPIN,
+            command_frame=FRAME_WORLD,
+            target_slot=3,
+            weapons_free=True,
+            estop=False,
+            enable=True,
+        )
+        frames = FrameParser().feed(raw)
+        self.assertEqual(len(frames), 1)
+        command = decode_command(frames[0])
+        self.assertAlmostEqual(command.vx_m_s, 0.3)
+        self.assertAlmostEqual(command.vy_m_s, -0.2)
+        self.assertAlmostEqual(command.spin_wz_rad_s, 2.5)
+        self.assertAlmostEqual(command.follow_yaw_offset_rad, 0.25)
+        self.assertEqual(command.chassis_mode, CHASSIS_SPIN)
+        self.assertEqual(command.command_frame, FRAME_WORLD)
+        self.assertEqual(command.target_slot, 3)
+        self.assertTrue(command.weapons_free)
+        self.assertTrue(command.enable)
+        self.assertFalse(command.estop)
+
+    def test_wrong_version_with_valid_crc_is_protocol_error(self) -> None:
+        raw = bytearray(
+            encode_telemetry(
+                sequence=1,
+                timestamp_ms=1,
+                x_m=0.0,
+                y_m=0.0,
+                yaw_rad=0.0,
+                vx_m_s=0.0,
+                vy_m_s=0.0,
+                wz_rad_s=0.0,
+                heat_17=0,
+                heat_17_limit=260,
+                ammo_remaining=0,
+                battery_voltage=24.0,
+                fault_flags=0,
+            )
+        )
+        raw[2] = (VERSION + 1) & 0xFF
+        body = bytes(raw[:-CRC.size])
+        raw[-CRC.size :] = CRC.pack(crc16_ccitt(body))
+
+        parser = FrameParser()
+        frames = parser.feed(bytes(raw))
+        self.assertEqual(frames, [])
+        self.assertGreaterEqual(parser.protocol_errors, 1)
 
     def test_python_and_c_command_encoding_match(self) -> None:
         expected = encode_command(

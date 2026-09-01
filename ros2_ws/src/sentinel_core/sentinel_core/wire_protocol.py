@@ -57,6 +57,28 @@ class Frame:
 
 
 @dataclass(slots=True)
+class Command:
+    vx_m_s: float
+    vy_m_s: float
+    wz_rad_s: float
+
+    spin_wz_rad_s: float
+    follow_yaw_offset_rad: float
+
+    yaw_big_target_rad: float
+    yaw_small_target_rad: float
+    pitch_target_rad: float
+
+    target_slot: int
+    chassis_mode: int
+    command_frame: int
+
+    weapons_free: bool
+    estop: bool
+    enable: bool
+
+
+@dataclass(slots=True)
 class Telemetry:
     x_m: float
     y_m: float
@@ -172,7 +194,12 @@ def encode_command(
     pitch_target_rad: float = 0.0,
     enable: bool = True,
 ) -> bytes:
-    if chassis_mode not in (CHASSIS_STOP, CHASSIS_DIRECT, CHASSIS_FOLLOW, CHASSIS_SPIN):
+    if chassis_mode not in (
+        CHASSIS_STOP,
+        CHASSIS_DIRECT,
+        CHASSIS_FOLLOW,
+        CHASSIS_SPIN,
+    ):
         raise ValueError("invalid chassis_mode")
     if command_frame not in (FRAME_BODY, FRAME_GIMBAL, FRAME_WORLD):
         raise ValueError("invalid command_frame")
@@ -200,6 +227,53 @@ def encode_command(
         flags,
     )
     return encode_frame(TYPE_COMMAND, sequence, timestamp_ms, payload)
+
+
+def decode_command(frame: Frame) -> Command:
+    if frame.message_type != TYPE_COMMAND or len(frame.payload) != COMMAND.size:
+        raise ValueError("not a command frame")
+
+    (
+        vx_mm_s,
+        vy_mm_s,
+        wz_mrad_s,
+        spin_wz_mrad_s,
+        follow_yaw_offset_mrad,
+        yaw_big_target_mrad,
+        yaw_small_target_mrad,
+        pitch_target_mrad,
+        target_slot,
+        chassis_mode,
+        command_frame,
+        flags,
+    ) = COMMAND.unpack(frame.payload)
+
+    if chassis_mode not in (
+        CHASSIS_STOP,
+        CHASSIS_DIRECT,
+        CHASSIS_FOLLOW,
+        CHASSIS_SPIN,
+    ):
+        raise ValueError("invalid chassis_mode in command")
+    if command_frame not in (FRAME_BODY, FRAME_GIMBAL, FRAME_WORLD):
+        raise ValueError("invalid command_frame in command")
+
+    return Command(
+        vx_m_s=vx_mm_s / 1000.0,
+        vy_m_s=vy_mm_s / 1000.0,
+        wz_rad_s=wz_mrad_s / 1000.0,
+        spin_wz_rad_s=spin_wz_mrad_s / 1000.0,
+        follow_yaw_offset_rad=follow_yaw_offset_mrad / 1000.0,
+        yaw_big_target_rad=yaw_big_target_mrad / 1000.0,
+        yaw_small_target_rad=yaw_small_target_mrad / 1000.0,
+        pitch_target_rad=pitch_target_mrad / 1000.0,
+        target_slot=int(target_slot),
+        chassis_mode=int(chassis_mode),
+        command_frame=int(command_frame),
+        weapons_free=bool(flags & COMMAND_FLAG_WEAPONS_FREE),
+        estop=bool(flags & COMMAND_FLAG_ESTOP),
+        enable=bool(flags & COMMAND_FLAG_ENABLE),
+    )
 
 
 def encode_telemetry(
@@ -302,6 +376,16 @@ def decode_telemetry(frame: Frame) -> Telemetry:
 class FrameParser:
     def __init__(self) -> None:
         self._buffer = bytearray()
+        self.frames_ok = 0
+        self.crc_errors = 0
+        self.protocol_errors = 0
+        self.framing_bytes_discarded = 0
+
+    def _discard(self, count: int) -> None:
+        count = min(max(int(count), 0), len(self._buffer))
+        if count:
+            del self._buffer[:count]
+            self.framing_bytes_discarded += count
 
     def feed(self, data: bytes) -> list[Frame]:
         self._buffer.extend(data)
@@ -309,20 +393,21 @@ class FrameParser:
         while True:
             index = self._buffer.find(MAGIC_BYTES)
             if index < 0:
-                if self._buffer[-1:] != MAGIC_BYTES[:1]:
-                    self._buffer.clear()
-                elif len(self._buffer) > 1:
-                    del self._buffer[:-1]
+                if self._buffer[-1:] == MAGIC_BYTES[:1]:
+                    self._discard(max(len(self._buffer) - 1, 0))
+                else:
+                    self._discard(len(self._buffer))
                 break
             if index:
-                del self._buffer[:index]
+                self._discard(index)
             if len(self._buffer) < HEADER.size:
                 break
             magic, version, kind, size, sequence, timestamp = HEADER.unpack_from(
                 self._buffer
             )
             if magic != MAGIC or version != VERSION or size > MAX_PAYLOAD:
-                del self._buffer[0]
+                self.protocol_errors += 1
+                self._discard(1)
                 continue
             total = HEADER.size + size + CRC.size
             if len(self._buffer) < total:
@@ -330,7 +415,8 @@ class FrameParser:
             body = bytes(self._buffer[: HEADER.size + size])
             expected_crc = CRC.unpack_from(self._buffer, HEADER.size + size)[0]
             if crc16_ccitt(body) != expected_crc:
-                del self._buffer[0]
+                self.crc_errors += 1
+                self._discard(1)
                 continue
             frames.append(
                 Frame(
@@ -340,5 +426,6 @@ class FrameParser:
                     payload=body[HEADER.size:],
                 )
             )
+            self.frames_ok += 1
             del self._buffer[:total]
         return frames

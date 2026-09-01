@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 3
 
 # Canonical ROS graph. Relative names in package code must resolve to these
 # absolute names regardless of whether a node is launched under /sentry.
@@ -19,6 +19,15 @@ commands:
   safe_chassis:
     topic: /sentry/cmd_vel_safe
     type: geometry_msgs/msg/Twist
+    owner: safety_supervisor_only
+  raw_chassis_control:
+    topic: /sentry/chassis_control
+    type: sentinel_interfaces/msg/ChassisControl
+    owner: chassis_mode_manager_or_authorized_controller
+    note: Raw mode/frame/SPIN/FOLLOW request. It never goes directly to hardware.
+  safe_chassis_control:
+    topic: /sentry/chassis_control_safe
+    type: sentinel_interfaces/msg/ChassisControl
     owner: safety_supervisor_only
   estop:
     topic: /sentry/estop
@@ -95,6 +104,11 @@ state:
     topic: /sentry/hardware_state
     type: sentinel_interfaces/msg/HardwareState
     owner: selected_mock_or_hardware_bridge
+  hardware_diagnostics:
+    topic: /sentry/hardware_diagnostics
+    type: sentinel_interfaces/msg/HardwareDiagnostics
+    owner: hardware_bridge
+    note: Transport/protocol counters only; it may not command actuators.
   system_status:
     topic: /sentry/system_status
     type: sentinel_interfaces/msg/SystemStatus
@@ -110,5 +124,7 @@ tf_ownership:
 
 rules:
   - Only safety_supervisor publishes /sentry/cmd_vel_safe.
-  - MCP and diagnostics may not publish /sentry/cmd_vel_safe, motor currents, PWM, or CAN frames.
+  - Only safety_supervisor publishes /sentry/chassis_control_safe.
+  - hardware_bridge subscribes to safe control buses only.
+  - MCP and diagnostics may not publish /sentry/cmd_vel_safe, /sentry/chassis_control_safe, motor currents, PWM, or CAN frames.
   - Exactly one backend may own simulated or real odometry in a running mode.

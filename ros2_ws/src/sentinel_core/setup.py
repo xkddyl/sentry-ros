@@ -22,6 +22,7 @@ setup(
             "hardware_bridge = sentinel_core.hardware_bridge:main",
             "mock_battle_state = sentinel_core.mock_battle_state:main",
             "mock_hardware = sentinel_core.mock_hardware:main",
+            "mock_lower_controller = sentinel_core.mock_lower_controller:main",
             "mock_nav_controller = sentinel_core.mock_nav_controller:main",
             "mode_manager = sentinel_core.mode_manager:main",
             "policy = sentinel_core.policy_node:main",

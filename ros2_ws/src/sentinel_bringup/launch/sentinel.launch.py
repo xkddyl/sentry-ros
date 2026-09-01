@@ -68,6 +68,9 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("hardware_endpoint", default_value="/dev/ttyACM0"),
             DeclareLaunchArgument("hardware_baudrate", default_value="921600"),
             DeclareLaunchArgument("start_mock_hardware", default_value="false"),
+            DeclareLaunchArgument("start_mock_lower_controller", default_value="false"),
+            DeclareLaunchArgument("mock_lower_bind_host", default_value="127.0.0.1"),
+            DeclareLaunchArgument("mock_lower_bind_port", default_value="20000"),
             DeclareLaunchArgument("start_mock_battle", default_value="false"),
             DeclareLaunchArgument("start_mock_nav", default_value="false"),
             description,
@@ -117,6 +120,17 @@ def generate_launch_description() -> LaunchDescription:
                         "transport": LaunchConfiguration("hardware_transport"),
                         "endpoint": LaunchConfiguration("hardware_endpoint"),
                         "baudrate": LaunchConfiguration("hardware_baudrate"),
+                    }
+                ],
+            ),
+            _node(
+                "mock_lower_controller",
+                condition=IfCondition(LaunchConfiguration("start_mock_lower_controller")),
+                parameters=[
+                    {
+                        "use_sim_time": False,
+                        "bind_host": LaunchConfiguration("mock_lower_bind_host"),
+                        "bind_port": LaunchConfiguration("mock_lower_bind_port"),
                     }
                 ],
             ),
