@@ -1,0 +1,65 @@
+schema_version: 1
+
+frame:
+  observation: base_link
+  x_positive: forward
+  y_positive: left
+  z_positive: up
+  yaw_positive: ccw
+
+bev:
+  width_m: 12.8
+  height_m: 12.8
+  resolution_m: 0.1
+  width_cells: 128
+  height_cells: 128
+  channels:
+    - obstacle
+    - free
+    - unknown
+    - enemy
+    - self
+    - goal
+
+state:
+  fields:
+    - vx_mps
+    - vy_mps
+    - wz_radps
+    - goal_dx_m
+    - goal_dy_m
+
+model:
+  name: bev_transformer_policy
+  patch_size: 8
+  embed_dim: 256
+  transformer_layers: 4
+  attention_heads: 8
+  mlp_ratio: 4.0
+  dropout: 0.1
+
+action:
+  fields: [vx_mps, vy_mps, wz_radps]
+  normalized_output: true
+  # Must be filled from the validated chassis; do not guess.
+  physical_limits:
+    vx_abs_mps: null
+    vy_abs_mps: null
+    wz_abs_radps: null
+
+training:
+  teacher_observation: gt_bev
+  student_observation: sensor_bev
+  preferred_sequence:
+    - behavior_cloning
+    - ppo
+    - sensor_distillation
+    - sensor_noise_finetune
+  simulator_inner_loop_uses_ros2: false
+
+deployment:
+  observation_topic: /sentry/e2e/observation
+  raw_command_topic: /sentry/e2e/cmd_vel_raw
+  selected_command_topic: /cmd_vel
+  safe_command_topic: /sentry/cmd_vel_safe
+  direct_safe_publish_forbidden: true

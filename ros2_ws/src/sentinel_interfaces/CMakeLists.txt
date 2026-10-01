@@ -10,6 +10,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/BattleEntity.msg"
   "msg/BattleState.msg"
   "msg/ChassisControl.msg"
+  "msg/EndToEndObservation.msg"
   "msg/HardwareDiagnostics.msg"
   "msg/HardwareState.msg"
   "msg/PolicyObservation.msg"
