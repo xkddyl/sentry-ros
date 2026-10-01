@@ -7,9 +7,10 @@
 
 | 话题 | 类型 | 主要发布者 | 用途 |
 |---|---|---|---|
-| `/cmd_vel` | `geometry_msgs/msg/Twist` | Nav2/策略仲裁器/Mock | 底盘原始速度入口 |
+| `/cmd_vel` | `geometry_msgs/msg/Twist` | Nav2/策略仲裁器/Mock | 被选中的底盘原始速度入口 |
 | `/cmd_vel_teleop` | `geometry_msgs/msg/Twist` | 遥控适配器 | 遥控优先入口，仍必须过安全层 |
 | `/sentry/cmd_vel_nav` | `geometry_msgs/msg/Twist` | Nav2 controller | Nav2 原始输出，需被仲裁到 `/cmd_vel` |
+| `/sentry/e2e/cmd_vel_raw` | `geometry_msgs/msg/Twist` | end-to-end inference | 学习策略原始 `vx,vy,wz`，需被仲裁到 `/cmd_vel` |
 | `/sentry/cmd_vel_safe` | `geometry_msgs/msg/Twist` | `safety_supervisor` 唯一 | 仿真或实车唯一执行速度 |
 | `/sentry/chassis_control` | `sentinel_interfaces/msg/ChassisControl` | 模式管理/授权控制器 | 原始底盘模式、坐标系、SPIN/FOLLOW 请求 |
 | `/sentry/chassis_control_safe` | `sentinel_interfaces/msg/ChassisControl` | `safety_supervisor` 唯一 | 经过急停、硬件/超时门控后的唯一执行模式 |
@@ -17,28 +18,76 @@
 | `/sentry/system_mode` | `std_msgs/msg/UInt8` | `mode_manager` | `sim=0`、`hil=1`、`real=2` |
 | `/sentry/system_status` | `sentinel_interfaces/msg/SystemStatus` | `safety_supervisor` | 看门狗、模式和互锁状态 |
 
-`ChassisControl` 只定义控制契约，不在安全层实现 Follow/SPIN 控制律。当前未出现
-`/sentry/chassis_control` 发布者时，为兼容既有 Nav2 链路，安全层使用 `DIRECT + BODY`
-作为缺省模式；一旦收到过显式模式请求，后续模式超时会转为 `STOP`。
+端到端推理节点只允许发布 `/sentry/e2e/cmd_vel_raw`，不能直接发布 `/cmd_vel`
+或 `/sentry/cmd_vel_safe`。命令源仲裁器负责在 Nav2、Teleop、端到端策略等来源之间选择
+唯一输入，再交给安全监督。
 
 安全监督必须执行急停、速度/加速度限幅、命令超时和 HIL/实车硬件心跳检查。MCP、调试
-键盘、自瞄和固件上位机均不得直接发布 `/sentry/cmd_vel_safe`、
+键盘、自瞄、端到端推理和固件上位机均不得直接发布 `/sentry/cmd_vel_safe`、
 `/sentry/chassis_control_safe`、电机电流、PWM 或 CAN 帧。
 
 ## 战术与交战
 
 | 话题 | 类型 | 发布者 | 说明 |
 |---|---|---|---|
-| `/sentry/battle_state` | `sentinel_interfaces/msg/BattleState` | 裁判/融合适配器 | 策略输入 |
-| `/sentry/policy/observation` | `sentinel_interfaces/msg/PolicyObservation` | observation node | 固定 161 维 |
+| `/sentry/battle_state` | `sentinel_interfaces/msg/BattleState` | 裁判/融合适配器 | 战术策略输入 |
+| `/sentry/policy/observation` | `sentinel_interfaces/msg/PolicyObservation` | observation node | 固定 161 维战术观测 |
 | `/sentry/policy/command` | `sentinel_interfaces/msg/TacticalCommand` | policy node | 子目标、目标槽位和交战请求 |
 | `/sentry/target_request` | `std_msgs/msg/Int8` | tactical executor | 未裁决的目标槽位 |
 | `/sentry/weapons_free_request` | `std_msgs/msg/Bool` | tactical executor | 未裁决的交战请求 |
 | `/sentry/target_safe` | `std_msgs/msg/Int8` | `safety_supervisor` 唯一 | `-1` 表示无目标 |
 | `/sentry/weapons_free_safe` | `std_msgs/msg/Bool` | `safety_supervisor` 唯一 | 固件仍需再次复核 |
 
-目标槽位必须在 `0–5` 范围内；目标、交战请求、裁判许可、热量和弹量任一过期或非法时，
-安全层输出 `false/-1`。
+端到端底盘路线和战术路线是两套并行策略边界；不要把 `EndToEndObservation` 与固定 161 维 `PolicyObservation` 混用。
+
+## 端到端学习接口
+
+| 话题 | 类型 | 发布者 | 说明 |
+|---|---|---|---|
+| `/sentry/e2e/observation` | `sentinel_interfaces/msg/EndToEndObservation` | perception/sim adapter | 版本化 BEV + body state + goal |
+| `/sentry/e2e/cmd_vel_raw` | `geometry_msgs/msg/Twist` | end-to-end inference | 原始机器人级速度动作 |
+
+`EndToEndObservation` v1 默认语义：
+
+```text
+frame = base_link
+
+BEV default shape:
+6 × 128 × 128
+
+channel order:
+obstacle
+free
+unknown
+enemy
+self
+goal
+
+low-dimensional:
+vx_mps
+vy_mps
+wz_radps
+goal_dx_m
+goal_dy_m
+```
+
+BEV 数组按 row-major 展平。消费端必须验证：
+
+- `schema_version`
+- `bev_height`
+- `bev_width`
+- `bev_channels`
+- `len(bev) == H * W * C`
+
+动作 Twist 只允许：
+
+```text
+linear.x  = vx [m/s]
+linear.y  = vy [m/s]
+angular.z = wz [rad/s]
+```
+
+其余字段必须为 0。
 
 ## 状态与传感器
 
@@ -53,10 +102,6 @@
 | `/sentry/imu` | `sensor_msgs/msg/Imu` | `imu_link`，仿真和实车保持同一语义 |
 | `/sentry/hardware_state` | `sentinel_interfaces/msg/HardwareState` | 有效遥测转换后的机器人状态 |
 | `/sentry/hardware_diagnostics` | `sentinel_interfaces/msg/HardwareDiagnostics` | transport/protocol 状态、收发频率、CRC/版本/sequence/重连计数 |
-
-`/sentry/hardware_diagnostics` 是纯诊断出口，不能反向控制底盘。`hardware_bridge` 只有在
-完整帧通过 magic/version/length/CRC、payload 解码和类型检查后，才刷新有效遥测时间；
-错误帧不得让硬件看起来在线。
 
 ## TF 所有权
 
@@ -75,17 +120,28 @@ map -> odom -> base_link -> lidar_link
 - `lidar_link -> imu_link`：Mid-360 内部固定外参；
 - `/tf_static` 使用 transient-local QoS，不能被动态节点重复发布。
 
+端到端学习接口固定使用 body frame：
+
+```text
++X forward
++Y left
++Z up
+positive yaw CCW
+```
+
 ## 后端互斥
 
 ```text
-/cmd_vel 或 /cmd_vel_teleop       /sentry/chassis_control
-        ↓                                  ↓
-        └──────────── safety_supervisor ───┘
-                         ↓
-          /sentry/cmd_vel_safe + /sentry/chassis_control_safe
-                         ↓
-        ├── VirtualLowerController → Isaac Sim
-        └── hardware_bridge → USB CDC/UDP → STM32
+Nav2 ───────────→ /sentry/cmd_vel_nav ──┐
+Teleop ─────────→ /cmd_vel_teleop ──────┼→ command arbiter → /cmd_vel
+End-to-End ─────→ /sentry/e2e/cmd_vel_raw┘
+                                             ↓
+                                      safety_supervisor
+                                             ↓
+                        /sentry/cmd_vel_safe + chassis mode
+                                             ↓
+                    ├── VirtualLowerController → Isaac Sim
+                    └── hardware_bridge → STM32
 ```
 
 运行模式中只能启用一个运动后端和一个 `odom -> base_link` 所有者。完整机器可读版本见
@@ -93,24 +149,5 @@ map -> odom -> base_link -> lidar_link
 
 ## 上位机协议回环
 
-在没有真实 STM32 时，使用 `mock_lower_controller` 作为 **二进制 UDP 对端**，而不是直接
-伪造 `/sentry/hardware_state`：
-
-```text
-safety_supervisor
-  -> hardware_bridge
-  -> UDP + wire protocol v2
-  -> mock_lower_controller
-  -> UDP telemetry v2
-  -> hardware_bridge
-  -> /sentry/hardware_state + /sentry/hardware_diagnostics
-```
-
-入口为：
-
-```bash
-ros2 launch sentinel_bringup lower_loopback.launch.py
-```
-
-Mock 支持 `drop_rate`、`crc_error_rate`、`wrong_version_rate`、`delay_ms`、`freeze`、
-`sequence_jump_every` 等故障注入参数，用于在真实下位机到位前验证上位机的降级行为。
+在没有真实 STM32 时，使用 `mock_lower_controller` 作为二进制 UDP 对端，继续验证
+安全监督、硬件桥、协议版本、CRC、sequence 和超时降级。端到端策略不得绕开这条安全链。
