@@ -13,48 +13,74 @@ Sim 适配、训练、协议和工具源码。压缩包 SHA256：
 - 运行部署：Ubuntu 24.04 + ROS 2 Jazzy
 - 仿真：NVIDIA Isaac Sim 6.x；上传的 Isaac-RM 4.1 资产通过兼容导入脚本接入
 - 战术策略：RMUC-OfflineRL（1 Hz，决定“去哪、打谁、是否允许开火”）
-- 执行层：Nav2 + 自瞄 + 底盘/云台固件
+- 端到端策略：BEV + Transformer，输出机器人级 `[vx, vy, wz]`
+- 执行层：Nav2 / 端到端速度源 + 自瞄 + 安全监督 + 底盘/云台固件
 
-> 重要：强化学习策略不是电机控制器。策略只输出导航子目标、优先交战目标和
-> `weapons_free` 许可；底盘闭环、云台闭环和真正扣扳机仍由确定性控制器负责。
+> 重要：学习策略不是电机控制器。无论是战术策略还是端到端底盘策略，都不能直接输出
+> 电机电流、PWM 或 CAN，也不能绕过 `safety_supervisor`。云台闭环和真正扣扳机仍由
+> 确定性控制器负责。
 
 ## 先看结论
 
-推荐部署链路：
+当前保留两条并行策略路线：
 
 ```text
-Isaac Lab 并行训练（不经过 ROS 2 内环）
-              │ 导出策略
-              ▼
-ROS 2 战术策略节点（1 Hz）
-              │ TacticalCommand
-              ▼
-Nav2 / 自瞄 / 安全监督
-              │ 安全速度与交战许可
-              ▼
-USB CDC 或 UDP 硬件桥
-              │ CRC 二进制协议
-              ▼
-STM32 / 电机控制器
+A. 现有战术路线
+BattleState
+    ↓
+161-D observation
+    ↓
+RMUC-OfflineRL / policy
+    ↓
+TacticalCommand
+    ↓
+Nav2 + autoaim
+    ↓
+/cmd_vel
+    ↓
+safety_supervisor
+
+B. 新增端到端底盘路线
+GT-BEV / Sensor-BEV + robot state + goal
+    ↓
+BEV + Transformer
+    ↓
+/sentry/e2e/cmd_vel_raw  = [vx, vy, wz]
+    ↓
+command-source arbiter
+    ↓
+/cmd_vel
+    ↓
+safety_supervisor
 ```
 
-ROS 2 负责总调度、数据契约、仿真/实车切换、回放和健康监控；不要把成百上千个
-Isaac Lab 并行环境的每个物理步都发进 DDS，否则训练吞吐会被通信开销拖垮。
+两条路线最终共享：
+
+```text
+/sentry/cmd_vel_safe
+    ↓
+Isaac virtual lower controller / STM32
+```
+
+Isaac Lab 并行训练不经过 ROS 2 内环；ROS 2 负责部署、回放、调度、HIL、实车切换和安全监督。
 
 ## 目录
 
 | 目录 | 用途 |
 |---|---|
 | `ros2_ws/src` | ROS 2 接口、导航、策略适配、安全监督、硬件桥与总启动 |
-| `training/RMUC-OfflineRL` | 固定版本的离线强化学习框架 |
-| `training/isaac_lab` | Isaac Lab 在线训练任务的接口契约和迁移骨架 |
+| `training/RMUC-OfflineRL` | 固定版本的离线战术强化学习框架 |
+| `training/isaac_lab` | 原有 161D/10D Isaac Lab 战术训练骨架 |
+| `training/end_to_end` | BEV + Transformer 端到端训练、算法、数据契约与部署接口 |
 | `isaac_sim` | Isaac Sim 场景加载、话题契约和旧资产导入说明 |
 | `firmware/protocol` | 可在 STM32/Linux 共用的 C11 二进制协议 |
 | `firmware/vendor/dp_sdk_core` | 固定版本的 OSAL/HAL/Device 参考实现 |
 | `config` | 网络、DDS 与系统级配置 |
 | `tools/windows` | Windows 安装、打包和跨机环境脚本 |
 | `tools/ubuntu` | Ubuntu 安装依赖、构建、诊断和启动脚本 |
-| `tests` | 不依赖 ROS 的协议、观测和工程结构测试 |
+| `tests` | 不依赖 ROS 的协议、观测、端到端契约和工程结构测试 |
+
+端到端入口见 [training/end_to_end/README.md](training/end_to_end/README.md)。
 
 详细设计见 [ARCHITECTURE.md](ARCHITECTURE.md)，各来源的取舍见
 [SOURCES.md](SOURCES.md)。
@@ -179,27 +205,27 @@ Windows（需已安装原生 ROS 2）：
 
 ## 当前完成度
 
-- 可静态验证并打包的 ROS 2 Jazzy 工作空间（源码已恢复，当前环境未重新运行 ROS 2）
+- 可静态验证并打包的 ROS 2 Jazzy 工作空间
 - 与 RMUC-OfflineRL 161 维观测、10 维战术动作一致的数据契约
+- 独立的 `training/end_to_end` 端到端训练框架和版本化 ROS 观察接口
+- BEV + Transformer policy 骨架，动作固定为 `[vx, vy, wz]`
 - Mock 策略、Mock 裁判状态、Mock 底盘闭环
 - Nav2 全向底盘配置与 RMUC 2024 地图
 - USB CDC / UDP 双传输硬件桥和 C/Python 同构协议
 - 仿真、HIL、实车三种启动模式
 - Isaac-RM 4.1 资产导入与 Isaac Sim 6.x 场景加载入口
 
-仍需要你的真实数据才能定标的部分：
+仍需要真实数据/目标机运行才能定标或验收的部分：
 
-- 哨兵 USD/URDF 的真实关节名、质量、惯量和摩擦参数
-- MID360、工业相机在车体上的精确外参
+- 端到端模型的实际物理速度上限、GT-BEV adapter、reward 与训练结果
+- MID360 Sensor-BEV、Point-LIO、工业相机/自瞄敌方轨迹接口
+- 哨兵 USD/URDF 的真实关节、动力学与摩擦参数
 - NUC 到 STM32 的实际串口 VID/PID、波特率与固件协议接入
-- Nav2 速度、加速度、膨胀半径和 MPPI 参数
-- 自瞄输入输出话题与裁判系统状态适配
-- 训练得到的 `best.pt` 和 `norm_stats.npz`
+- Nav2 参数与实车安全限幅
+- 训练得到的 checkpoint / exported policy
 
 ### 当前真实性边界
 
-- 旧的 Stage5D/Phase F–J1 日志只作为历史证据，不能替代当前模型验收。
-- V2 模型的视觉结论已撤销；V3 Variant A 的 `globalXforms=false` 仍需人工 GUI
-  确认，未确认前不得用于运动仿真或训练。
-- ROS、Isaac Sim、Nav2、Point-LIO 和真实硬件的运行验收必须按
+- “框架已进入仓库”不等于“训练或实车已 PASS”。
+- ROS、Isaac Sim、Nav2、Point-LIO、端到端训练与真实硬件的运行验收必须按
   `docs/development/TEST_GATES.md` 逐级完成。
