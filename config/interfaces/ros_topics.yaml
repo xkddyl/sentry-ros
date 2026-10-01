@@ -1,4 +1,4 @@
-schema_version: 3
+schema_version: 4
 
 # Canonical ROS graph. Relative names in package code must resolve to these
 # absolute names regardless of whether a node is launched under /sentry.
@@ -16,6 +16,11 @@ commands:
     type: geometry_msgs/msg/Twist
     owner: nav2_controller
     note: Optional diagnostic/input topic; it must be arbitrated into /cmd_vel.
+  e2e_chassis:
+    topic: /sentry/e2e/cmd_vel_raw
+    type: geometry_msgs/msg/Twist
+    owner: end_to_end_inference
+    note: Raw learned policy output; it must be arbitrated into /cmd_vel and may never bypass safety_supervisor.
   safe_chassis:
     topic: /sentry/cmd_vel_safe
     type: geometry_msgs/msg/Twist
@@ -68,6 +73,18 @@ tactical:
     topic: /sentry/weapons_free_safe
     type: std_msgs/msg/Bool
     owner: safety_supervisor_only
+
+learning:
+  e2e_observation:
+    topic: /sentry/e2e/observation
+    type: sentinel_interfaces/msg/EndToEndObservation
+    owner: perception_or_sim_adapter
+    frame: base_link
+    schema_version: 1
+  e2e_command:
+    topic: /sentry/e2e/cmd_vel_raw
+    type: geometry_msgs/msg/Twist
+    owner: end_to_end_inference
 
 state:
   clock:
@@ -125,6 +142,7 @@ tf_ownership:
 rules:
   - Only safety_supervisor publishes /sentry/cmd_vel_safe.
   - Only safety_supervisor publishes /sentry/chassis_control_safe.
+  - End-to-end inference may publish /sentry/e2e/cmd_vel_raw but never /sentry/cmd_vel_safe.
   - hardware_bridge subscribes to safe control buses only.
   - MCP and diagnostics may not publish /sentry/cmd_vel_safe, /sentry/chassis_control_safe, motor currents, PWM, or CAN frames.
   - Exactly one backend may own simulated or real odometry in a running mode.
