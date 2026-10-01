@@ -1,13 +1,14 @@
 # 训练层
 
-本目录把两类训练分开：
+本目录把三条训练路线明确分开，避免战术策略、底盘端到端策略和 Isaac 适配互相污染：
 
-1. `RMUC-OfflineRL/`：固定到提交
-   `f0d54521caa5b5701665b97f87df309ab2ed8f87` 的离线战术学习上游快照。
-2. `isaac_lab/`：Isaac Lab 在线仿真训练的接口契约和任务迁移骨架。
+1. `RMUC-OfflineRL/`：固定版本的离线战术学习上游快照，使用 161 维观测、10 维战术动作。
+2. `isaac_lab/`：原有 Isaac Lab 战术在线训练接口骨架，保持 161/10 契约。
+3. `end_to_end/`：新增的感知 + 导航 + 决策端到端训练框架，输入 BEV + 机器人状态 + goal，输出机器人级 `[vx, vy, wz]`。
 
-离线策略的默认部署接口是 161 维观测、10 维战术动作。Isaac Lab 任务也必须保持这
-两个维度，才能复用 ROS 2 的 `PolicyObservation` / `TacticalCommand` 边界。
+端到端路线**不替代**现有 TacticalCommand 战术路线，两者可以并行研究。端到端路线也不直接控制舵轮、电机、云台或发射机构。
+
+详细说明见 [end_to_end/README.md](end_to_end/README.md)。
 
 ## ROS 2 总调度
 
@@ -38,13 +39,33 @@ ros2 service call /sentry/training/stop \
 管理器不执行 shell 字符串，只调用预配置的 `training/run_job.py`，配置也必须位于
 `training/jobs/` 内。这样 ROS 2 能调度作业，但不能被远端请求变成任意命令执行器。
 
+## 两条策略部署边界
+
+```text
+A. 战术策略
+BattleState → 161D → tactical policy → TacticalCommand → Nav2 / autoaim
+
+B. 端到端底盘策略
+BEV + state + goal → BEV Transformer → [vx,vy,wz]
+                                      ↓
+                           /sentry/e2e/cmd_vel_raw
+                                      ↓
+                             command arbiter
+                                      ↓
+                                  /cmd_vel
+                                      ↓
+                              safety_supervisor
+```
+
+两条路线最终都必须经过安全监督，禁止任何学习节点直接发布 `/sentry/cmd_vel_safe`。
+
 ## 建议顺序
 
-1. 用官方 SQLite 数据构建 `data/infantry_tactical`。
-2. 训练并保留验证集最优的 `best.pt`，不要默认用 `final.pt`。
-3. 用 mock 与 rosbag 回放验证输出稳定性。
-4. 在 Isaac Lab 中做随机化/碰撞/约束验证，不把 DDS 放入并行物理内环。
-5. 导出策略到 `artifacts/policies/<run_name>`，在 HIL 中限制速度且禁用发射。
-6. 最后才在实车上释放急停和开火门控。
+1. 保留并验证现有 RMUC 离线战术分支。
+2. 先跑通已验证的 Isaac 四舵轮 `[vx,vy,wz]` 执行接口。
+3. 在 `end_to_end/` 中做 GT-BEV → Behavior Cloning / PPO Teacher。
+4. 接入 MID-360 Sensor-BEV 与敌方轨迹做 Student / Distillation。
+5. 用 replay 和仿真验证，再进入 HIL；HIL 阶段禁用发射。
+6. 最后才在实车上低速释放运动权限。
 
-离线数据集和训练的具体命令以 `RMUC-OfflineRL/README.md` 为准。
+离线数据集和训练的具体命令以对应子目录 README 为准。
