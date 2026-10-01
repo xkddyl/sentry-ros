@@ -1,102 +1,123 @@
 # Sentinel 当前项目状态
 
-更新时间：2026-09-01
+更新时间：2026-10-01
 
 ## 结论
 
-`workspace.zip` 已恢复、校验并合并到本仓库。恢复来源是用户原工作区的源码快照，
-不是单独的 USD 资产项目。压缩包 SHA256：
-`118276849edf3fe0920c8d6addfca4eb8b1b73e867a50d17a78a9472519a0cc2`。
+当前仓库已具备 ROS 2、Isaac Sim 适配、共享四舵轮运动学、硬件协议、离线战术学习骨架，
+并于 2026-10-01 增加了独立的 `training/end_to_end` 端到端训练框架。
 
-当前仓库已具备一套可继续开发的工作区和接口骨架，但不能把压缩包里的历史日志或
-旧机器上的 PASS 结论当成当前运行验收。
+端到端分支已经定义：
 
-2026-09-01 增加了上位机协议回环/诊断源代码：双安全控制总线、UDP Mock Lower
-Controller、transport supervisor 和协议/sequence 诊断。**这些源代码已进入仓库，
-但 Ubuntu 24.04/Jazzy 的 ROS 2 构建与运行回环仍需要在目标工作机上重新执行，不能把
-“代码已合入”写成运行 PASS。**
+```text
+BEV + robot state + goal
+        ↓
+BEV + Transformer
+        ↓
+[vx, vy, wz]
+        ↓
+command arbitration
+        ↓
+/cmd_vel
+        ↓
+safety_supervisor
+```
+
+这表示**代码结构和接口契约已纳入仓库**，不代表端到端模型训练、Isaac 闭环、HIL 或实车已经 PASS。
 
 ## 现状表
 
 | 范围 | 当前状态 | 说明 |
 |---|---|---|
-| ROS 2 源码 | 已恢复 | 五个 ROS 包、启动文件、消息/服务、Mock 节点已纳入 |
-| 上位机安全/通信 | 源码已扩展、待目标机运行 | `/cmd_vel` 与 `ChassisControl` 双安全总线、hardware bridge 重连/诊断、UDP Mock Lower 已实现 |
-| 共享运动学 | 已存在 | `sentinel_common` 的 C++17 四舵轮核心和主机测试保留 |
-| STM32 协议 | v2 接口已定义 | `firmware/protocol` 提供 C11 编解码参考；真实电机闭环属于下位机工作，尚未硬件联通 |
-| Isaac 适配 | 已恢复/待验收 | 脚本和传感器契约纳入；必须显式提供已批准 USD |
-| Nav2/Point-LIO | 下游骨架 | 依赖安装、真实 TF/传感器和运行验证尚未在本环境重跑 |
-| 离线 RL | 契约已恢复 | RMUC-OfflineRL 按固定 commit 外置获取，不把第三方工作树提交进来 |
-| V2 模型 | 失效 | 视觉结论已撤销，禁止用于运动或训练 |
-| V3 Variant A | 待人工确认 | `globalXforms=false` 仅有自动取证，必须在 Isaac GUI 复核 |
+| ROS 2 源码 | 已恢复/扩展 | 五个 ROS 包、启动文件、消息/服务、Mock 节点已纳入 |
+| 上位机安全/通信 | 源码已扩展、待目标机运行 | `/cmd_vel` 与 `ChassisControl` 双安全总线、hardware bridge、UDP Mock Lower 已实现 |
+| 共享运动学 | 已存在 | `sentinel_common` 的 C++17 四舵轮核心保留；Python/Isaac 新运动学验证结果仍需后续同步进仓库 |
+| STM32 协议 | v2 接口已定义 | `firmware/protocol` 提供 C11 编解码参考；真实电机闭环属于下位机工作 |
+| Isaac 适配 | 已恢复/待目标机同步最新资产 | 仓库内保留适配框架；最新已验证 USD/运动学调试资产仍应按资产规则显式接入 |
+| Nav2/Point-LIO | 下游骨架 | 依赖、真实 TF、MID360 与运行验证仍需在目标机完成 |
+| 离线战术 RL | 契约已恢复 | 161D observation / 10D tactical action |
+| 端到端训练 | 框架已加入、待运行 | 新增 BEV observation、Transformer policy scaffold、ROS deployment contract 与测试 |
+| Sensor-BEV | 未完成 | 等待 MID360/Point-LIO/局部障碍物输出 |
+| GT-BEV Teacher | 未完成 | 等待最新 Isaac 场地/机器人资产和 `vx,vy,wz` 执行层接入 |
 
-## 固定接口
+## 固定速度接口
 
 ```text
-速度：
-高层来源（Nav2 / 遥控 / 策略）
+来源：
+Nav2 / Teleop / End-to-End policy
         ↓
-全局 /cmd_vel 或 /cmd_vel_teleop
+原始速度源
+        ↓
+command-source arbitration
+        ↓
+/cmd_vel
         ↓
 safety_supervisor
         ↓
 唯一安全速度 /sentry/cmd_vel_safe
-
-模式：
-模式管理 / 后续 Follow-SPIN 控制器
         ↓
-/sentry/chassis_control
-        ↓
-safety_supervisor
-        ↓
-唯一安全模式 /sentry/chassis_control_safe
-
-两条 safe bus
-        ↓
-        ├── 仿真：Isaac 虚拟下位机
-        └── 实车/HIL：hardware_bridge → USB CDC/UDP → STM32/Mock Lower
+Isaac virtual lower / STM32
 ```
 
-`hardware_bridge` 另外发布 `/sentry/hardware_diagnostics`，用于观察 TX/RX、CRC、协议版本、
-sequence gap/duplicate/out-of-order、有效遥测年龄和重连次数。错误 CRC/版本/解码失败的包
-不得刷新硬件在线时间。
+端到端新增原始速度话题：
 
-MCP 只用于开发、诊断和高层任务编排，不进入 100–1000 Hz 实时控制环，也不得直接
-发布安全速度、安全底盘模式、电机电流、PWM 或 CAN 帧。
+```text
+/sentry/e2e/cmd_vel_raw
+geometry_msgs/msg/Twist
+```
 
-标准 TF 总线为全局 `/tf`、`/tf_static`；仿真时钟为全局 `/clock`。完整列表见
-[`docs/TOPIC_CONTRACT.md`](docs/TOPIC_CONTRACT.md) 和机器可读的
-[`config/interfaces/ros_topics.yaml`](config/interfaces/ros_topics.yaml)。
+它不得直接连接硬件，也不得直接发布 `/sentry/cmd_vel_safe`。
 
-## 导入范围
+## 端到端 Observation v1
 
-已纳入：
+ROS 部署边界：
 
-- `ros2_ws/src/{sentinel_bringup,sentinel_core,sentinel_description,sentinel_interfaces,sentinel_navigation}`；
-- `isaac_sim` 的脚本、配置和话题契约；
-- `training` 的接口、任务配置和运行器；
-- `firmware/protocol`、配置、测试、Windows/Ubuntu/集成工具；
-- 原工作区文档与来源说明。
+```text
+/sentry/e2e/observation
+sentinel_interfaces/msg/EndToEndObservation
+```
 
-未纳入：
+默认训练约定：
 
-- `ros2_ws/build`、`install`、`log`、Python 缓存和运行日志；
-- 第三方完整 Git 工作树；
-- 约 424 MB STEP、Isaac 安装包和未批准 USD。
+```text
+BEV: 6 × 128 × 128
+channels:
+  obstacle
+  free
+  unknown
+  enemy
+  self
+  goal
 
-第三方依赖的 URL、commit、许可证和补丁见 [`VERSIONS.lock.yaml`](VERSIONS.lock.yaml)
-与 [`dependencies/README.md`](dependencies/README.md)。
+state:
+  vx
+  vy
+  wz
+  goal_dx
+  goal_dy
+
+frame:
+  base_link
+```
+
+动作：
+
+```text
+[vx, vy, wz]
+```
+
+实际物理速度上限暂不写死，必须从已验证底盘仿真/HIL/实车参数中填写。
 
 ## 下一阶段验收顺序
 
-1. 在仓库根目录运行 `bash tools/ubuntu/run_checks.sh`；
-2. 在 Ubuntu 24.04/Jazzy 构建 `sentinel_interfaces sentinel_core sentinel_bringup`；
-3. 运行 `ros2 launch sentinel_bringup lower_loopback.launch.py`，确认 Mock Lower 二进制回环；
-4. 注入 CRC/版本/drop/sequence/delay 故障，确认 diagnostics 与 Safety 降级一致；
-5. 再与真实 STM32 做无电机协议台架，核对 C/Python golden vector、watchdog 和状态字段；
-6. 在明确批准的 USD 上重新做 Isaac GUI/运动学检查；
-7. 再接入 Follow/SPIN、Nav2、Point-LIO、NUC 和 STM32 HIL；
-8. 最后按悬空轮、低速落地、限速限流和机械急停顺序进行实车测试。
+1. 将最新 Isaac Sim 6.0.1 的已验证哨兵 Physics/四舵轮运动学代码同步到本仓库对应模块；
+2. 在目标机运行 `python3 -m unittest tests.test_end_to_end_contract -v`；
+3. 重新构建 `sentinel_interfaces`，确认 `EndToEndObservation.msg` 可生成；
+4. 接 GT-BEV adapter，建立 `SentryGoToGoal-v0`；
+5. 用固定 `[vx,vy,wz]` action contract 做单环境闭环；
+6. 再向量化训练 Behavior Cloning/PPO Teacher；
+7. 并行完成 MID360 → Point-LIO → local obstacle cloud；
+8. 接 Sensor-BEV Student 与 Teacher distillation；
+9. replay → simulation → HIL → real，逐级验收。
 
-每一步必须有命令、日志和明确 PASS/FAIL，未通过不得推进。详见
-[`docs/development/TEST_GATES.md`](docs/development/TEST_GATES.md)。
+每一步必须有命令、日志和明确 PASS/FAIL。未经目标机执行的代码集成不能写成运行 PASS。
