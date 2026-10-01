@@ -1,5 +1,8 @@
+from pathlib import Path
 import math
 import unittest
+
+import yaml
 
 from training.end_to_end.contract import (
     DEFAULT_BEV_CHANNELS,
@@ -9,6 +12,9 @@ from training.end_to_end.contract import (
     validate_low_dim_state,
     validate_normalized_action,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class EndToEndContractTests(unittest.TestCase):
@@ -43,6 +49,48 @@ class EndToEndContractTests(unittest.TestCase):
             validate_normalized_action([0.0, 0.0])
         with self.assertRaises(ValueError):
             validate_normalized_action([0.0, math.inf, 0.0])
+
+    def test_ros_interface_is_registered(self):
+        msg_path = (
+            ROOT
+            / "ros2_ws"
+            / "src"
+            / "sentinel_interfaces"
+            / "msg"
+            / "EndToEndObservation.msg"
+        )
+        self.assertTrue(msg_path.is_file())
+        cmake = (
+            ROOT
+            / "ros2_ws"
+            / "src"
+            / "sentinel_interfaces"
+            / "CMakeLists.txt"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"msg/EndToEndObservation.msg"', cmake)
+
+    def test_topic_contract_keeps_learning_output_behind_safety(self):
+        topics = yaml.safe_load(
+            (ROOT / "config" / "interfaces" / "ros_topics.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            topics["learning"]["e2e_observation"]["topic"],
+            "/sentry/e2e/observation",
+        )
+        self.assertEqual(
+            topics["learning"]["e2e_command"]["topic"],
+            "/sentry/e2e/cmd_vel_raw",
+        )
+        self.assertEqual(
+            topics["commands"]["safe_chassis"]["owner"],
+            "safety_supervisor_only",
+        )
+        self.assertNotEqual(
+            topics["learning"]["e2e_command"]["topic"],
+            topics["commands"]["safe_chassis"]["topic"],
+        )
 
 
 if __name__ == "__main__":
