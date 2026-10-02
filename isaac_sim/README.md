@@ -1,13 +1,15 @@
-# Isaac Sim 接入
+# Isaac Sim 接入（RMUL 2026）
 
-> 本目录保存 Isaac Sim 适配器和接口契约，不代表当前 USD 模型已经通过验收。旧的
+> 本目录保存 Isaac Sim 适配器和接口契约。本赛季仅面向 RoboMaster 2026 RMUL；旧 RMUC 2024 / Isaac-RM 4.1 资产只作历史兼容和参考，不是当前比赛场地。当前远程 4090 主机的 RMUL 2026 场地、机器人路径和启动命令见 `docs/development/REMOTE_4090_SIM_GUIDE.md`。
+>
+> 不代表当前 USD 模型已经通过验收。旧的
 > Stage5D/Phase F–J1 输出仅作历史记录；运行前必须通过 `SENTRY_USD_PATH` 显式指定
 > 已人工确认的 USD，并设置 `SENTRY_MODEL_APPROVED=1`。
 
 目标版本为 Isaac Sim 6.x；上传的 Isaac-RM 工程来自 4.1 时代，因此采用“资产迁移、
 接口重建”的方式，不直接假设旧 Action Graph 能在新版本工作。
 
-## 1. 导入旧资产
+## 1. 历史资产导入（非 RMUL 2026 比赛场地）
 
 在工作空间根目录执行：
 
@@ -23,7 +25,7 @@ python3 tools/common/import_isaac_rm.py \
 isaac_sim/assets/legacy_4_1/
 ```
 
-先用 Isaac Sim GUI 打开 `RMUC_sim_nav/RMUC_RAW.usd`，查看 Missing References、刚体、
+如果需要做历史兼容检查，可用 Isaac Sim GUI 打开 `RMUC_sim_nav/RMUC_RAW.usd`，查看 Missing References、刚体、
 碰撞体、质量和单位。不要在旧资产上直接覆盖保存；另存成
 `isaac_sim/assets/migrated_6_x/sentinel_stage.usd`。
 
@@ -77,10 +79,10 @@ Isaac Lab 并行训练内环保留在 GPU 进程中，动作和物理步不经�
 
 - 启停训练/评估作业；
 - 单环境可视化和回放；
-- 导出策略后的 1 Hz 战术推理；
+- RMUL 端到端策略的单环境可视化、回放与部署验证；
 - 仿真、HIL、实车共用接口与健康状态。
 
-训练接口见 `training/isaac_lab/README.md`。这种边界同时保留训练吞吐和部署一致性。
+RMUL 2026 主训练接口见 `training/end_to_end/README.md`；`training/isaac_lab/` 的 161D/10D 内容只保留为历史参考。这种边界同时保留训练吞吐和部署一致性。
 
 ## 5. 迁移验收
 

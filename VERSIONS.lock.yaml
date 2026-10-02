@@ -1,18 +1,29 @@
 workspace_schema: 1
-generated_at: 2026-08-30
+season:
+  competition: RMUL
+  year: 2026
+  scope: active-season-only
+  rmuc_content: legacy-reference-only
+generated_at: 2026-10-02
 target:
-  os: Ubuntu 24.04
-  ros: ROS 2 Jazzy
+  os: Ubuntu 22.04
+  ros: ROS 2 Humble
   rmw: rmw_fastrtps_cpp
   isaac_sim: 6.x
-  python: ">=3.12 for Isaac Sim 6; ROS Python follows Jazzy packages"
+  python: "Isaac Sim 6 runtime uses its own Python; ROS Python follows Ubuntu 22.04 / Humble packages"
 interfaces:
-  policy_observation_schema: 1
-  policy_observation_dim: 161
-  tactical_action_dim: 10
+  end_to_end_observation_schema: 1
+  end_to_end_action: [vx, vy, wz]
   hardware_wire_protocol: 1
+  legacy_rmuc:
+    active_for_season: false
+    policy_observation_schema: 1
+    policy_observation_dim: 161
+    tactical_action_dim: 10
 upstreams:
   RMUC-OfflineRL:
+    active_for_season: false
+    purpose: legacy_reference_only
     url: https://github.com/Harkerbest/RMUC-OfflineRL.git
     commit: f0d54521caa5b5701665b97f87df309ab2ed8f87
     license: MIT
@@ -43,4 +54,5 @@ assets:
     tested_upstream_version: Isaac Sim 4.1
   rmuc2024_navigation_map:
     bundled_from_user_archive: true
-    use: non-commercial technical development
+    active_for_season: false
+    use: legacy structure/reference only; RMUL 2026 requires current-season assets

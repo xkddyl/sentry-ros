@@ -7,8 +7,8 @@ if [[ ! -r /etc/os-release ]]; then
 fi
 
 source /etc/os-release
-if [[ "${ID:-}" != "ubuntu" || "${VERSION_ID:-}" != "24.04" ]]; then
-  echo "This bootstrap targets Ubuntu 24.04; found ${PRETTY_NAME:-unknown}." >&2
+if [[ "${ID:-}" != "ubuntu" || "${VERSION_ID:-}" != "22.04" ]]; then
+  echo "This bootstrap targets Ubuntu 22.04; found ${PRETTY_NAME:-unknown}." >&2
   exit 2
 fi
 
@@ -36,14 +36,13 @@ sudo apt-get install -y \
   python3-serial \
   python3-setuptools \
   python3-yaml \
-  ros-dev-tools \
-  ros-jazzy-desktop \
-  ros-jazzy-navigation2 \
-  ros-jazzy-nav2-bringup \
-  ros-jazzy-nav2-mppi-controller \
-  ros-jazzy-rmw-fastrtps-cpp \
-  ros-jazzy-robot-state-publisher \
-  ros-jazzy-xacro \
+  ros-humble-desktop \
+  ros-humble-navigation2 \
+  ros-humble-nav2-bringup \
+  ros-humble-nav2-mppi-controller \
+  ros-humble-rmw-fastrtps-cpp \
+  ros-humble-robot-state-publisher \
+  ros-humble-xacro \
   unzip
 
 if [[ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]]; then
@@ -52,5 +51,5 @@ fi
 rosdep update
 sudo usermod -aG dialout "${USER}"
 
-echo "ROS 2 Jazzy dependencies installed."
+echo "ROS 2 Humble dependencies installed."
 echo "Log out and back in once for the dialout group change to take effect."

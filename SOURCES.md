@@ -16,14 +16,14 @@
 非标准坐标系、地图未安装和配置副本混杂等问题。原作者声明限技术交流、不得商业
 使用，因此大体积资产由用户自己的压缩包导入，不在本工程重复分发。
 
-## RMUC-OfflineRL
+## RMUC-OfflineRL（历史参考，非 RMUL 2026 主线）
 
 - 来源：`Harkerbest/RMUC-OfflineRL`
 - 链接：<https://github.com/Harkerbest/RMUC-OfflineRL>
 - 固定提交：`f0d54521caa5b5701665b97f87df309ab2ed8f87`
 - 许可：MIT
 
-采用：
+历史上参考过：
 
 - 161 维固定槽位战场观测；
 - 10 维 tactical 动作；
@@ -53,8 +53,7 @@ RTOS 差异留在端口层。仓库快照位于 `firmware/vendor/dp_sdk_core`，
 - 链接：<https://blog.csdn.net/baidu_37973494/article/details/156861168>
 
 文章强调工作空间、功能包、节点、话题、服务、参数、Launch、DDS 多机通信和
-`ros2 bag`。本工程落实了这些工程元素，但目标平台采用 Ubuntu 24.04 + ROS 2 Jazzy，
-而不是文章面向新手推荐的 Ubuntu 22.04 + Humble。
+`ros2 bag`。本工程落实了这些工程元素；当前赛季平台基线就是 Ubuntu 22.04 + ROS 2 Humble。
 
 文章中“默认 Cyclone DDS”等说法不作为本项目事实依据；跨 Windows/Isaac Sim 统一
 明确使用 Fast DDS。
@@ -68,8 +67,8 @@ RTOS 差异留在端口层。仓库快照位于 `firmware/vendor/dp_sdk_core`，
 
 ## 当前官方基线
 
-- ROS 2 Jazzy Ubuntu 安装：
-  <https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html>
+- ROS 2 Humble Ubuntu 22.04 安装：
+  <https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html>
 - Isaac Sim 6 ROS 2 安装：
   <https://docs.isaacsim.omniverse.nvidia.com/6.0.0/installation/install_ros.html>
 - Isaac Lab DirectRLEnv：
