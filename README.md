@@ -29,48 +29,27 @@ Sim 适配、训练、协议和工具源码。压缩包 SHA256：
 
 ## 先看结论
 
-本赛季只面向 RMUL。当前主动开发主线是端到端底盘/导航路线；旧 RMUC 战术路线仅作历史参考：
+本赛季只面向 **RoboMaster 2026 高校联盟赛（RMUL）**。当前主动开发主线为：
 
-```text
-A. RMUL 当前主线
+~~~text
 GT-BEV / Sensor-BEV + robot state + goal
-    ↓
+        ↓
 BEV + Transformer
-    ↓
+        ↓
 /sentry/e2e/cmd_vel_raw = [vx, vy, wz]
-    ↓
+        ↓
 command-source arbiter
-    ↓
+        ↓
 /cmd_vel
-    ↓
+        ↓
 safety_supervisor
-
-B. 历史参考（非本赛季主线）
-RMUC-OfflineRL / 161-D tactical route
-    ↓
-仅用于代码/思路参考，不作为 RMUL 2026 默认运行路径
-
-当前端到端底盘路线
-GT-BEV / Sensor-BEV + robot state + goal
-    ↓
-BEV + Transformer
-    ↓
-/sentry/e2e/cmd_vel_raw  = [vx, vy, wz]
-    ↓
-command-source arbiter
-    ↓
-/cmd_vel
-    ↓
-safety_supervisor
-```
-
-两条路线最终共享：
-
-```text
+        ↓
 /sentry/cmd_vel_safe
-    ↓
+        ↓
 Isaac virtual lower controller / STM32
-```
+~~~
+
+旧的 RMUC-OfflineRL、161D/10D 战术契约、RMUC 2024 地图和相关资产只保留为历史参考或结构兼容测试，不作为 RMUL 2026 默认运行、训练或比赛路径。
 
 Isaac Lab 并行训练不经过 ROS 2 内环；ROS 2 负责部署、回放、调度、HIL、实车切换和安全监督。
 
