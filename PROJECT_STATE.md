@@ -1,6 +1,6 @@
 # Sentinel 当前项目状态
 
-更新时间：2026-10-01
+更新时间：2026-10-02
 
 ## 结论
 
@@ -39,6 +39,29 @@ safety_supervisor
 | 端到端训练 | 框架已加入、待运行 | 新增 BEV observation、Transformer policy scaffold、ROS deployment contract 与测试 |
 | Sensor-BEV | 未完成 | 等待 MID360/Point-LIO/局部障碍物输出 |
 | GT-BEV Teacher | 未完成 | 等待最新 Isaac 场地/机器人资产和 `vx,vy,wz` 执行层接入 |
+
+## 2026-10-02 远程 Isaac 执行层进展
+
+当前远程 4090 仿真机已经完成场地物理、哨兵落地、四舵轮 IK/FK 与 Phase A 12/12 独立工况验证。连续控制仍保留一个低频 RR 轮速反号问题，隔离实验尚未锁定根因，因此 **P4 仍为 IN PROGRESS，不能标记完全 PASS**。
+
+当前可信状态：
+
+~~~text
+P0 Field Physics                 PASS
+P1 Sentry Landing Physics        PASS
+P2 Swerve IK/FK                  PASS
+P3 Phase A 12/12                 PASS
+P4 Continuous execution          IN PROGRESS
+P5 GT-BEV / SentryGoToGoal-v0    NEXT
+P6 BEV + Transformer / PPO       AFTER P5
+P7 MID360 Sensor-BEV             PARALLEL
+~~~
+
+远程服务器启动命令、资产路径和 Codex/Isaac 修改边界见：
+[docs/development/REMOTE_4090_SIM_GUIDE.md](docs/development/REMOTE_4090_SIM_GUIDE.md)。
+
+多人协作和目录 ownership 见：
+[docs/development/TEAM_COLLABORATION_GUIDE.md](docs/development/TEAM_COLLABORATION_GUIDE.md)。
 
 ## 固定速度接口
 
