@@ -36,7 +36,6 @@ sudo apt-get install -y \
   python3-serial \
   python3-setuptools \
   python3-yaml \
-  python3-rosdep \
   ros-humble-desktop \
   ros-humble-navigation2 \
   ros-humble-nav2-bringup \
