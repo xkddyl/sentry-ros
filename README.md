@@ -17,9 +17,9 @@ Sim 适配、训练、协议和工具源码。压缩包 SHA256：
 面向 RoboMaster 全自动哨兵的分层工作空间。默认目标平台是：
 
 - 开发编辑：Windows 11（VS Code / CLion 均可）
-- 运行部署：Ubuntu 24.04 + ROS 2 Jazzy
+- 运行/部署基线：Ubuntu 22.04 + ROS 2 Humble
 - 仿真：NVIDIA Isaac Sim 6.x；上传的 Isaac-RM 4.1 资产通过兼容导入脚本接入
-- 战术策略：RMUC-OfflineRL（1 Hz，决定“去哪、打谁、是否允许开火”）
+- 赛季范围：RoboMaster 2026 高校联盟赛（RMUL）；RMUC 相关代码/资产仅保留为历史参考，不作为本赛季运行主线
 - 端到端策略：BEV + Transformer，输出机器人级 `[vx, vy, wz]`
 - 执行层：Nav2 / 端到端速度源 + 自瞄 + 安全监督 + 底盘/云台固件
 
@@ -29,25 +29,28 @@ Sim 适配、训练、协议和工具源码。压缩包 SHA256：
 
 ## 先看结论
 
-当前保留两条并行策略路线：
+本赛季只面向 RMUL。当前主动开发主线是端到端底盘/导航路线；旧 RMUC 战术路线仅作历史参考：
 
 ```text
-A. 现有战术路线
-BattleState
+A. RMUL 当前主线
+GT-BEV / Sensor-BEV + robot state + goal
     ↓
-161-D observation
+BEV + Transformer
     ↓
-RMUC-OfflineRL / policy
+/sentry/e2e/cmd_vel_raw = [vx, vy, wz]
     ↓
-TacticalCommand
-    ↓
-Nav2 + autoaim
+command-source arbiter
     ↓
 /cmd_vel
     ↓
 safety_supervisor
 
-B. 新增端到端底盘路线
+B. 历史参考（非本赛季主线）
+RMUC-OfflineRL / 161-D tactical route
+    ↓
+仅用于代码/思路参考，不作为 RMUL 2026 默认运行路径
+
+当前端到端底盘路线
 GT-BEV / Sensor-BEV + robot state + goal
     ↓
 BEV + Transformer
@@ -76,7 +79,7 @@ Isaac Lab 并行训练不经过 ROS 2 内环；ROS 2 负责部署、回放、调
 | 目录 | 用途 |
 |---|---|
 | `ros2_ws/src` | ROS 2 接口、导航、策略适配、安全监督、硬件桥与总启动 |
-| `training/RMUC-OfflineRL` | 固定版本的离线战术强化学习框架 |
+| `training/RMUC-OfflineRL` | 历史 RMUC 离线战术参考；非 RMUL 2026 主线 |
 | `training/isaac_lab` | 原有 161D/10D Isaac Lab 战术训练骨架 |
 | `training/end_to_end` | BEV + Transformer 端到端训练、算法、数据契约与部署接口 |
 | `isaac_sim` | Isaac Sim 场景加载、话题契约和旧资产导入说明 |
@@ -120,9 +123,9 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\Install-Workspace.ps1 `
 Windows 侧适合写代码、管理 Git 和查看 ROS 数据；Isaac Sim、Nav2 与实车主流程建议
 放在 Ubuntu 原生系统执行。
 
-## 2. 导入上传的 Isaac-RM 资产
+## 2. 历史 Isaac-RM / RMUC 资产说明
 
-本工程不重复分发约 253 MB 的非商业资产。把原始 `Isaac-RM.zip` 放在任意位置后：
+旧 `Isaac-RM.zip` / RMUC 2024 资产只用于历史兼容、接口测试或参考，不作为 RMUL 2026 比赛场地。确需导入历史资产时：
 
 ```powershell
 python .\tools\common\import_isaac_rm.py `
@@ -131,19 +134,18 @@ python .\tools\common\import_isaac_rm.py `
 ```
 
 脚本会跳过压缩包内的 `.git` 和缩略图，将场地/机器人 USD 放入
-`isaac_sim/assets/legacy_4_1`。工作空间已自带小体积的 RMUC 2024 栅格地图，因此不
-导入 USD 也能完成 ROS 2 结构测试。
+`isaac_sim/assets/legacy_4_1`。工作空间保留的小体积 RMUC 2024 栅格地图同样只用于历史结构测试。RMUL 2026 运行必须显式使用本赛季场地/地图资产。
 
 ## 3. Ubuntu 首次构建
 
-在 Ubuntu 24.04 中进入工作空间根目录：
+在 Ubuntu 22.04 中进入工作空间根目录：
 
 ```bash
-bash tools/ubuntu/bootstrap_jazzy.sh
+bash tools/ubuntu/bootstrap_humble.sh
 bash tools/ubuntu/build.sh
 ```
 
-`bootstrap_jazzy.sh` 会安装 ROS 2 Jazzy、Nav2、构建工具和串口依赖；它不会安装
+`bootstrap_humble.sh` 会安装 ROS 2 Humble、Nav2、构建工具和串口依赖；它不会安装
 NVIDIA 驱动或 Isaac Sim。
 
 先运行不依赖 Isaac Sim、Nav2 地图定位和真实硬件的冒烟闭环：
@@ -155,7 +157,7 @@ bash tools/ubuntu/run_smoke.sh
 另开终端检查：
 
 ```bash
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source ros2_ws/install/setup.bash
 ros2 topic echo /sentry/system_status
 ros2 topic echo /sentry/policy/command
@@ -221,12 +223,12 @@ Windows（需已安装原生 ROS 2）：
 
 ## 当前完成度
 
-- 可静态验证并打包的 ROS 2 Jazzy 工作空间
-- 与 RMUC-OfflineRL 161 维观测、10 维战术动作一致的数据契约
+- 面向 Ubuntu 22.04 + ROS 2 Humble 的工作空间
+- RMUC-OfflineRL 161D/10D 契约仅作为历史参考；RMUL 2026 主线使用独立端到端 observation/action contract
 - 独立的 `training/end_to_end` 端到端训练框架和版本化 ROS 观察接口
 - BEV + Transformer policy 骨架，动作固定为 `[vx, vy, wz]`
 - Mock 策略、Mock 裁判状态、Mock 底盘闭环
-- Nav2 全向底盘配置与 RMUC 2024 地图
+- Nav2 全向底盘配置；RMUC 2024 地图仅为历史测试资产，RMUL 2026 地图需显式接入
 - USB CDC / UDP 双传输硬件桥和 C/Python 同构协议
 - 仿真、HIL、实车三种启动模式
 - Isaac-RM 4.1 资产导入与 Isaac Sim 6.x 场景加载入口
