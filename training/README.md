@@ -39,13 +39,10 @@ ros2 service call /sentry/training/stop \
 管理器不执行 shell 字符串，只调用预配置的 `training/run_job.py`，配置也必须位于
 `training/jobs/` 内。这样 ROS 2 能调度作业，但不能被远端请求变成任意命令执行器。
 
-## 两条策略部署边界
+## RMUL 2026 主部署边界
 
 ```text
-A. 战术策略
-BattleState → 161D → tactical policy → TacticalCommand → Nav2 / autoaim
-
-B. 端到端底盘策略
+RMUL 2026:
 BEV + state + goal → BEV Transformer → [vx,vy,wz]
                                       ↓
                            /sentry/e2e/cmd_vel_raw
@@ -57,12 +54,15 @@ BEV + state + goal → BEV Transformer → [vx,vy,wz]
                               safety_supervisor
 ```
 
-两条路线最终都必须经过安全监督，禁止任何学习节点直接发布 `/sentry/cmd_vel_safe`。
+历史 RMUC TacticalCommand/161D/10D 路线仅保留作参考，不属于本赛季默认部署路径。
+
+
+所有 RMUL 学习节点都必须经过安全监督，禁止直接发布 `/sentry/cmd_vel_safe`。
 
 ## 建议顺序
 
 1. 先跑通已验证的 Isaac 四舵轮 `[vx,vy,wz]` 执行接口。
-2.  在 `end_to_end/` 中做 GT-BEV → Behavior Cloning / PPO Teacher。
+2. 在 `end_to_end/` 中做 GT-BEV → Behavior Cloning / PPO Teacher。
 3. 接入 MID-360 Sensor-BEV 与敌方轨迹做 Student / Distillation。
 4. 用 replay 和仿真验证，再进入 HIL；HIL 阶段禁用发射。
 5. 最后才在实车上低速释放运动权限。
