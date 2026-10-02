@@ -4,7 +4,7 @@
 
 ## 结论
 
-当前仓库已具备 ROS 2、Isaac Sim 适配、共享四舵轮运动学、硬件协议、离线战术学习骨架，
+当前仓库面向 RoboMaster 2026 高校联盟赛（RMUL），运行基线为 Ubuntu 22.04 + ROS 2 Humble。仓库已具备 ROS 2、Isaac Sim 适配、共享四舵轮运动学、硬件协议，以及历史战术学习参考代码，
 并于 2026-10-01 增加了独立的 `training/end_to_end` 端到端训练框架。
 
 端到端分支已经定义：
@@ -35,10 +35,21 @@ safety_supervisor
 | STM32 协议 | v2 接口已定义 | `firmware/protocol` 提供 C11 编解码参考；真实电机闭环属于下位机工作 |
 | Isaac 适配 | 已恢复/待目标机同步最新资产 | 仓库内保留适配框架；最新已验证 USD/运动学调试资产仍应按资产规则显式接入 |
 | Nav2/Point-LIO | 下游骨架 | 依赖、真实 TF、MID360 与运行验证仍需在目标机完成 |
-| 离线战术 RL | 契约已恢复 | 161D observation / 10D tactical action |
+| RMUC 离线战术 RL | 历史参考 | 161D/10D 代码与契约不作为 RMUL 2026 默认运行主线 |
 | 端到端训练 | 框架已加入、待运行 | 新增 BEV observation、Transformer policy scaffold、ROS deployment contract 与测试 |
 | Sensor-BEV | 未完成 | 等待 MID360/Point-LIO/局部障碍物输出 |
 | GT-BEV Teacher | 未完成 | 等待最新 Isaac 场地/机器人资产和 `vx,vy,wz` 执行层接入 |
+
+## 赛季与平台基线
+
+```text
+Season: RoboMaster 2026 RMUL only
+OS: Ubuntu 22.04
+ROS 2: Humble
+Isaac Sim: 6.0.1
+```
+
+RMUC 相关策略、地图和旧资产只保留作历史兼容/参考；新功能、训练、导航与实车集成均以 RMUL 2026 为目标。
 
 ## 2026-10-02 远程 Isaac 执行层进展
 
