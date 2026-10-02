@@ -22,12 +22,12 @@ Isaac Lab: /home/ubuntu/RoboMaster/IsaacLab
 仓库当前 ROS 2 主目标仍是：
 
 ~~~text
-Ubuntu 24.04
-ROS 2 Jazzy
+Ubuntu 22.04
+ROS 2 Humble
 Fast DDS
 ~~~
 
-不要因为仿真机是 22.04，就把 ROS 2 Jazzy 部署说明整体改成 22.04。
+仿真、上位机与部署统一按 Ubuntu 22.04 + ROS 2 Humble 维护。
 
 ## 2. 文件按五类管理
 
@@ -35,7 +35,7 @@ Fast DDS
 |---|---|---:|---|
 | A. 团队业务源码 | ros2_ws/src/sentinel_*, sentinel_common, isaac_sim, training/end_to_end, tools, tests | 是 | 日常主要开发区 |
 | B. 团队接口/配置 | config, docs, launch/config YAML, msg/srv | 是 | 修改必须同步接口文档和测试 |
-| C. 第三方固定依赖 | ros2_ws/src/third_party, firmware/vendor, 外部 RMUC-OfflineRL | 否 | 由 VERSIONS.lock.yaml 固定，优先 patch/wrapper/fork |
+| C. 第三方固定依赖 | ros2_ws/src/third_party, firmware/vendor，以及历史 RMUC-OfflineRL | 否 | 由 VERSIONS.lock.yaml 固定；RMUC 内容仅作历史参考 |
 | D. 官方安装/运行库 | Isaac Sim、Isaac Lab、ROS 2、Nav2 系统安装 | 否 | 调用 API，不直接修改安装内容 |
 | E. 生成物/大资产 | USD、rosbag、checkpoint、build/install/log、trajectory、TensorBoard | 否 | 默认不进 Git；只提交摘要、配置和可复现脚本 |
 
@@ -407,7 +407,7 @@ tensorboard/
 
 ## 9. 当前任务交接顺序
 
-截至 2026-10-02：
+截至 2026-10-02，本赛季仅面向 RMUL 2026；RMUC 相关代码/资产不得作为当前默认比赛路径：
 
 ~~~text
 P0 Field Physics                 PASS
