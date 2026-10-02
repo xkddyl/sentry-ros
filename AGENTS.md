@@ -6,16 +6,32 @@ This is the primary software repository for a RoboMaster autonomous sentry robot
 
 The repository combines ROS 2 packages (`ros2_ws/src`), Python training code (`training`), Isaac Sim integration (`isaac_sim`), system configuration (`config`), and a shared C11 protocol (`firmware/protocol`). Treat `firmware/vendor/`, third-party imports, and generated `ros2_ws/{build,install,log}` content as out of scope unless a task explicitly targets them.
 
-## Fixed Local Paths
+## Runtime Paths and Host Boundaries
 
-- Primary software repository: `/home/xkddyl/RoboMaster/Sentinel/SentinelWorkspace/workspace`
-- ROS 2 workspace: `/home/xkddyl/RoboMaster/Sentinel/SentinelWorkspace/workspace/ros2_ws`
-- Isaac integration: `/home/xkddyl/RoboMaster/Sentinel/SentinelWorkspace/workspace/isaac_sim`
-- Isaac/USD asset project: `/home/xkddyl/RoboMaster/Sentinel/sentinelusd/Sentry_IsaacSim_Linux`
-- Isaac Sim: `/home/xkddyl/issac-sim/isaac-sim`
-- Isaac Sim Python: `/home/xkddyl/issac-sim/isaac-sim/python.sh`
+Do not assume one absolute path works on every developer machine.
 
-Do not physically merge or move the software repository and USD asset project. Do not initialize Git in `/home/xkddyl/RoboMaster/Sentinel`, and leave its empty `.git` directory untouched.
+### Current remote 4090 simulation host (2026-10-02)
+
+- Simulation work root: `/home/ubuntu/RoboMaster`
+- Isaac Lab runtime: `/home/ubuntu/RoboMaster/IsaacLab`
+- Original field (never overwrite): `/home/ubuntu/RMwork/sentryusd/Sentry_space/RMUL2026.usd`
+- Physics baseline: `/home/ubuntu/RMwork/sentryusd/Sentry_space/RMUL2026_sentry_work.usd`
+- Robot source assets: `/home/ubuntu/RMwork/sentryusd/Sentry/Sentry/`
+- Debug scenes: `/home/ubuntu/RoboMaster/scenes/`
+- Runtime results: `/home/ubuntu/RoboMaster/results/`
+
+The remote `/home/ubuntu/RoboMaster` directory is a simulation work root, not automatically the canonical Git checkout. Verify the actual `sentry-ros` clone before any Git operation. Do not run `git init` merely because a directory has an empty or unexpected `.git`.
+
+### Repository checkout
+
+Each developer may clone this repository elsewhere. Resolve paths relative to the repository root whenever possible. Do not hard-code the historical `/home/xkddyl/...` workstation paths into new code.
+
+### Official/upstream runtime
+
+Treat the installed Isaac Sim / Isaac Lab runtime as upstream. Do not modify its source, site-packages, or official examples to implement project behavior. Put adapters and project logic under this repository's `isaac_sim/`, `training/`, `tools/`, `ros2_ws/src/sentinel_*`, or equivalent team-owned modules.
+
+See `docs/development/REMOTE_4090_SIM_GUIDE.md` and
+`docs/development/TEAM_COLLABORATION_GUIDE.md` before editing simulation or cross-team interfaces.
 
 ## Integration and Asset Rules
 
