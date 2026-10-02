@@ -2,7 +2,7 @@
 
 > 目标读者：当前只开发 NUC/ROS 2 上位机，不负责 STM32 内部电机、CAN、PID、BMI088 驱动实现。
 >
-> 目标平台：Ubuntu 24.04 + ROS 2 Jazzy。Isaac Sim、Nav2、Point-LIO 在对应 Gate 通过后继续接入。
+> 目标平台：Ubuntu 22.04 + ROS 2 Humble。Isaac Sim、Nav2、Point-LIO 在对应 Gate 通过后继续接入。
 
 ## 1. 先建立一个总图
 
@@ -422,7 +422,7 @@ bridge UDP local 20001
 构建后：
 
 ```bash
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source ros2_ws/install/setup.bash
 ros2 launch sentinel_bringup lower_loopback.launch.py
 ```
@@ -432,7 +432,7 @@ ros2 launch sentinel_bringup lower_loopback.launch.py
 另一个终端：
 
 ```bash
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source ros2_ws/install/setup.bash
 ros2 topic echo /sentry/hardware_diagnostics
 ```
@@ -497,7 +497,7 @@ ros2 run sentinel_core mock_lower_controller --ros-args \
 
 ### 现在
 
-1. 把上位机 loopback 在 Ubuntu 24.04/Jazzy 真正跑通；
+1. 把上位机 loopback 在 Ubuntu 22.04/Humble 真正跑通；
 2. 把 diagnostics 做成你联调时的第一观察窗口；
 3. 和下位机同学用 protocol v2 做 golden-vector 联调；
 4. 明确真实 USB 设备路径、VID/PID、权限；
@@ -545,7 +545,7 @@ git pull --ff-only
 bash tools/ubuntu/run_checks.sh
 ```
 
-Ubuntu/Jazzy 依赖齐全后，再构建相关包：
+Ubuntu/Humble 依赖齐全后，再构建相关包：
 
 ```bash
 colcon build --symlink-install \
