@@ -1,12 +1,12 @@
 # 训练层
 
-本目录把三条训练路线明确分开，避免战术策略、底盘端到端策略和 Isaac 适配互相污染：
+本目录区分 RMUL 2026 主线与历史研究代码，避免旧 RMUC 战术策略、端到端策略和 Isaac 适配互相污染：
 
-1. `RMUC-OfflineRL/`：固定版本的离线战术学习上游快照，使用 161 维观测、10 维战术动作。
+1. `RMUC-OfflineRL/`：历史 RMUC 离线战术学习快照，仅供参考，不作为 RMUL 2026 训练/部署主线。
 2. `isaac_lab/`：原有 Isaac Lab 战术在线训练接口骨架，保持 161/10 契约。
 3. `end_to_end/`：新增的感知 + 导航 + 决策端到端训练框架，输入 BEV + 机器人状态 + goal，输出机器人级 `[vx, vy, wz]`。
 
-端到端路线**不替代**现有 TacticalCommand 战术路线，两者可以并行研究。端到端路线也不直接控制舵轮、电机、云台或发射机构。
+RMUL 2026 当前主动训练主线是 `end_to_end/`。历史 TacticalCommand/RMUC 路线可用于代码和方法参考，但不应成为本赛季默认运行路径。端到端路线也不直接控制舵轮、电机、云台或发射机构。
 
 详细说明见 [end_to_end/README.md](end_to_end/README.md)。
 
@@ -15,7 +15,7 @@
 在工作空间根目录启动任务管理器：
 
 ```bash
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source ros2_ws/install/setup.bash
 ros2 launch sentinel_bringup training.launch.py workspace_root:="$PWD"
 ```
@@ -61,11 +61,10 @@ BEV + state + goal → BEV Transformer → [vx,vy,wz]
 
 ## 建议顺序
 
-1. 保留并验证现有 RMUC 离线战术分支。
-2. 先跑通已验证的 Isaac 四舵轮 `[vx,vy,wz]` 执行接口。
-3. 在 `end_to_end/` 中做 GT-BEV → Behavior Cloning / PPO Teacher。
-4. 接入 MID-360 Sensor-BEV 与敌方轨迹做 Student / Distillation。
-5. 用 replay 和仿真验证，再进入 HIL；HIL 阶段禁用发射。
-6. 最后才在实车上低速释放运动权限。
+1. 先跑通已验证的 Isaac 四舵轮 `[vx,vy,wz]` 执行接口。
+2.  在 `end_to_end/` 中做 GT-BEV → Behavior Cloning / PPO Teacher。
+3. 接入 MID-360 Sensor-BEV 与敌方轨迹做 Student / Distillation。
+4. 用 replay 和仿真验证，再进入 HIL；HIL 阶段禁用发射。
+5. 最后才在实车上低速释放运动权限。
 
 离线数据集和训练的具体命令以对应子目录 README 为准。
