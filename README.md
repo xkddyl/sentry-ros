@@ -7,6 +7,13 @@ Sim 适配、训练、协议和工具源码。压缩包 SHA256：
 当前只把工作区源码纳入仓库；生成的 `ros2_ws/build/install/log`、运行日志、缓存、
 第三方工作树和大体积 USD 仍按依赖/资产说明单独获取。
 
+> **团队成员 2026-10-02 起先读：**
+> [联合开发与目录归属规范](docs/development/TEAM_COLLABORATION_GUIDE.md)；
+> 使用远程 4090 + Codex + Isaac Sim 的成员再读
+> [远程仿真服务器工作流](docs/development/REMOTE_4090_SIM_GUIDE.md)。
+> 这两份文档明确哪些目录属于团队源码、哪些是第三方/官方依赖，以及感知、导航、
+> 端到端训练、底盘/协议分别应在哪里开发。
+
 面向 RoboMaster 全自动哨兵的分层工作空间。默认目标平台是：
 
 - 开发编辑：Windows 11（VS Code / CLion 均可）
@@ -79,6 +86,15 @@ Isaac Lab 并行训练不经过 ROS 2 内环；ROS 2 负责部署、回放、调
 | `tools/windows` | Windows 安装、打包和跨机环境脚本 |
 | `tools/ubuntu` | Ubuntu 安装依赖、构建、诊断和启动脚本 |
 | `tests` | 不依赖 ROS 的协议、观测、端到端契约和工程结构测试 |
+
+目录归属补充：
+
+- **团队重点编辑**：`ros2_ws/src/sentinel_*`、`sentinel_common/`、`isaac_sim/`、`training/end_to_end/`、`tools/`、`tests/`、`config/`、`docs/`。
+- **第三方固定依赖**：`ros2_ws/src/third_party/`、`firmware/vendor/` 等，由 `VERSIONS.lock.yaml` 固定，优先通过 wrapper/config/patch 集成，不直接日常修改。
+- **官方运行库**：Isaac Sim、Isaac Lab、ROS 2、Nav2 系统安装仅通过 API/配置调用，不把业务修复写进官方安装目录。
+- **感知/导航**：导航主目录是 `ros2_ws/src/sentinel_navigation/`；MID-360/Point-LIO 上游在 `third_party/`；当前正式感知生产包尚未完成，Sensor-BEV/GT-BEV 主要在 `training/end_to_end/` 与 `isaac_sim/` 演进。
+- **驱动/下位机边界**：`hardware_bridge.py` + `firmware/protocol/` 定义上位机到 STM32 的边界；真正电机 PID/CAN 由下位机工程维护。
+- **训练**：`training/end_to_end/` 是 BEV + Transformer 主线，动作固定为机器人级 `[vx, vy, wz]`。
 
 端到端入口见 [training/end_to_end/README.md](training/end_to_end/README.md)。
 
