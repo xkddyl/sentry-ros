@@ -2,7 +2,7 @@
 
 ## Project Mission
 
-This is the primary software repository for a RoboMaster autonomous sentry robot. The main development areas are ROS 2 Jazzy, NVIDIA Isaac Sim 6.0.1, a four-module swerve chassis, gimbal control, navigation, perception, adversarial simulation, and later Isaac Lab / reinforcement learning.
+This is the primary software repository for the RoboMaster 2026 RMUL autonomous sentry robot. RMUC-specific code and assets are legacy/reference only and are not the active season target. The main development areas are ROS 2 Humble on Ubuntu 22.04, NVIDIA Isaac Sim 6.0.1, a four-module swerve chassis, gimbal control, navigation, perception, adversarial simulation, and later Isaac Lab / reinforcement learning.
 
 The repository combines ROS 2 packages (`ros2_ws/src`), Python training code (`training`), Isaac Sim integration (`isaac_sim`), system configuration (`config`), and a shared C11 protocol (`firmware/protocol`). Treat `firmware/vendor/`, third-party imports, and generated `ros2_ws/{build,install,log}` content as out of scope unless a task explicitly targets them.
 
@@ -65,7 +65,7 @@ For ROS 2 changes, build affected packages, run relevant tests, and verify names
 
 ## Safety and Permission Boundaries
 
-- Do not run `sudo`, `apt install`, `pip install`, or `tools/ubuntu/bootstrap_jazzy.sh` automatically. State what is missing and why, then obtain authorization.
+- Do not run `sudo`, `apt install`, `pip install`, or `tools/ubuntu/bootstrap_humble.sh` automatically. State what is missing and why, then obtain authorization.
 - Do not modify system ROS 2 or any file in the official Isaac Sim installation.
 - Do not alter Git history, create remotes, or discard user changes. Commits/pushes are
   allowed only when the user explicitly requests repository integration.
