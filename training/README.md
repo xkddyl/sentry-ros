@@ -20,13 +20,7 @@ source ros2_ws/install/setup.bash
 ros2 launch sentinel_bringup training.launch.py workspace_root:="$PWD"
 ```
 
-启动一个允许列表中的训练配置：
-
-```bash
-ros2 service call /sentry/training/start \
-  sentinel_interfaces/srv/StartTraining \
-  "{config_path: training/jobs/offline_infantry_iql.yaml, run_name: iql_try_01}"
-```
+训练管理器仍可调度 `training/jobs/` 中的允许列表任务；现有 `offline_infantry_iql.yaml` 属于历史 RMUC 示例，不作为 RMUL 2026 训练入口。RMUL 的 GT-BEV / SentryGoToGoal-v0 作业配置在实现后再加入允许列表，未完成前不要把历史任务当成本赛季默认任务。
 
 查看状态或停止：
 
