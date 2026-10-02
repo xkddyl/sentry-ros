@@ -12,10 +12,14 @@ target:
   isaac_sim: 6.x
   python: "Isaac Sim 6 runtime uses its own Python; ROS Python follows Ubuntu 22.04 / Humble packages"
 interfaces:
-  policy_observation_schema: 1
-  policy_observation_dim: 161
-  tactical_action_dim: 10
+  end_to_end_observation_schema: 1
+  end_to_end_action: [vx, vy, wz]
   hardware_wire_protocol: 1
+  legacy_rmuc:
+    active_for_season: false
+    policy_observation_schema: 1
+    policy_observation_dim: 161
+    tactical_action_dim: 10
 upstreams:
   RMUC-OfflineRL:
     active_for_season: false
