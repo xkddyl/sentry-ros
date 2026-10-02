@@ -18,6 +18,8 @@ interfaces:
   hardware_wire_protocol: 1
 upstreams:
   RMUC-OfflineRL:
+    active_for_season: false
+    purpose: legacy_reference_only
     url: https://github.com/Harkerbest/RMUC-OfflineRL.git
     commit: f0d54521caa5b5701665b97f87df309ab2ed8f87
     license: MIT
@@ -48,4 +50,5 @@ assets:
     tested_upstream_version: Isaac Sim 4.1
   rmuc2024_navigation_map:
     bundled_from_user_archive: true
-    use: non-commercial technical development
+    active_for_season: false
+    use: legacy structure/reference only; RMUL 2026 requires current-season assets
