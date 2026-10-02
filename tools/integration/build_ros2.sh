@@ -6,8 +6,8 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/sentinel_env.sh"
 
 dependency_error=0
-if [[ ! -r /opt/ros/jazzy/setup.bash ]]; then
-    echo "ERROR: ROS2 Jazzy setup is missing: /opt/ros/jazzy/setup.bash" >&2
+if [[ ! -r /opt/ros/humble/setup.bash ]]; then
+    echo "ERROR: ROS2 Humble setup is missing: /opt/ros/humble/setup.bash" >&2
     dependency_error=1
 fi
 if ! command -v colcon >/dev/null 2>&1; then
