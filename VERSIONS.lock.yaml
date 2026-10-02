@@ -1,11 +1,16 @@
 workspace_schema: 1
-generated_at: 2026-08-30
+season:
+  competition: RMUL
+  year: 2026
+  scope: active-season-only
+  rmuc_content: legacy-reference-only
+generated_at: 2026-10-02
 target:
-  os: Ubuntu 24.04
-  ros: ROS 2 Jazzy
+  os: Ubuntu 22.04
+  ros: ROS 2 Humble
   rmw: rmw_fastrtps_cpp
   isaac_sim: 6.x
-  python: ">=3.12 for Isaac Sim 6; ROS Python follows Jazzy packages"
+  python: "Isaac Sim 6 runtime uses its own Python; ROS Python follows Ubuntu 22.04 / Humble packages"
 interfaces:
   policy_observation_schema: 1
   policy_observation_dim: 161
